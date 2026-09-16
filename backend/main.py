@@ -4,14 +4,28 @@ sys.path.insert(0, os.path.dirname(__file__))
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from contextlib import asynccontextmanager
 from routes.auth import router as auth_router
 from routes.message_shooter import router as message_shooter_router
 from routes.lead_distributor import router as lead_distributor_router
+from routes.test import router as test_router
+from services.scheduler_service import start_scheduler, stop_scheduler
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    print("🚀 Starting application...")
+    start_scheduler()
+    yield
+    # Shutdown
+    print("🛑 Shutting down application...")
+    stop_scheduler()
 
 app = FastAPI(
     title="Automation Dashboard API",
     description="Real estate broker automation",
-    version="0.1.0"
+    version="0.1.0",
+    lifespan=lifespan
 )
 
 # CORS middleware
@@ -27,6 +41,7 @@ app.add_middleware(
 app.include_router(auth_router)
 app.include_router(message_shooter_router)
 app.include_router(lead_distributor_router)
+app.include_router(test_router)
 
 @app.get("/")
 async def root():

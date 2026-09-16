@@ -1,6 +1,12 @@
+import sys
+import os
+sys.path.insert(0, os.path.dirname(__file__))
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from backend.routes import auth_router, message_shooter_router, lead_distributor_router
+from routes.auth import router as auth_router
+from routes.message_shooter import router as message_shooter_router
+from routes.lead_distributor import router as lead_distributor_router
 
 app = FastAPI(
     title="Automation Dashboard API",
@@ -19,6 +25,8 @@ app.add_middleware(
 
 # Include routes
 app.include_router(auth_router)
+app.include_router(message_shooter_router)
+app.include_router(lead_distributor_router)
 
 @app.get("/")
 async def root():

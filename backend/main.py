@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from backend.routes.auth import router as auth_router
+from backend.routes import auth_router, message_shooter_router, lead_distributor_router
 
 app = FastAPI(
     title="Automation Dashboard API",

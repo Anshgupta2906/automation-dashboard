@@ -10,6 +10,7 @@ from routes.message_shooter import router as message_shooter_router
 from routes.lead_distributor import router as lead_distributor_router
 from routes.test import router as test_router
 from services.scheduler_service import start_scheduler, stop_scheduler
+from backend.routes import auth_router, message_shooter_router, lead_distributor_router, test_router, calling_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -42,6 +43,7 @@ app.include_router(auth_router)
 app.include_router(message_shooter_router)
 app.include_router(lead_distributor_router)
 app.include_router(test_router)
+app.include_router(calling_router)
 
 @app.get("/")
 async def root():

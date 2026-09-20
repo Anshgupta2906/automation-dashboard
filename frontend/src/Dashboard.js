@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import MessageShooter from './MessageShooter';
 import LeadDistributor from './LeadDistributor';
+import CallingSystem from './CallingSystem';
 
 export default function Dashboard() {
   const [activeTab, setActiveTab] = useState('message-shooter');
@@ -51,11 +52,25 @@ export default function Dashboard() {
         >
           Lead Distributor
         </button>
+        <button
+          onClick={() => setActiveTab('calling')}
+          style={{
+            padding: '10px 20px',
+            backgroundColor: activeTab === 'calling' ? '#007bff' : '#ddd',
+            color: activeTab === 'calling' ? 'white' : 'black',
+            border: 'none',
+            borderRadius: '4px',
+            cursor: 'pointer'
+          }}
+        >
+          Auto Calling
+        </button>
       </div>
 
       <div style={{ padding: '20px', border: '1px solid #ddd', borderRadius: '8px' }}>
         {activeTab === 'message-shooter' && <MessageShooter />}
         {activeTab === 'lead-distributor' && <LeadDistributor />}
+        {activeTab === 'calling' && <CallingSystem />}
       </div>
     </div>
   );

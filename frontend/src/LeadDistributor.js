@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import axios from 'axios';
 
@@ -6,103 +7,244 @@ export default function LeadDistributor() {
   const [staffName, setStaffName] = useState('');
   const [staffEmail, setStaffEmail] = useState('');
   const [contactsPerDay, setContactsPerDay] = useState(300);
-  const [selectedDays, setSelectedDays] = useState(['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']);
+  const [selectedDays, setSelectedDays] = useState([
+    'monday',
+    'tuesday',
+    'wednesday',
+    'thursday',
+    'friday',
+    'saturday'
+  ]);
   const [sendTime, setSendTime] = useState('08:00');
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState('');
   const [stats, setStats] = useState(null);
 
-  const days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+  const days = [
+    'monday',
+    'tuesday',
+    'wednesday',
+    'thursday',
+    'friday',
+    'saturday',
+    'sunday'
+  ];
 
+  // Toggle selected days
   const handleDayToggle = (day) => {
     setSelectedDays(prev =>
-      prev.includes(day) ? prev.filter(d => d !== day) : [...prev, day]
+      prev.includes(day)
+        ? prev.filter(d => d !== day)
+        : [...prev, day]
     );
   };
 
+  // Upload contacts
   const handleFileUpload = async (e) => {
     const uploadFile = e.target.files[0];
+
+    if (!uploadFile) {
+      return;
+    }
+
+    setFile(uploadFile);
     setLoading(true);
+
     try {
       const formData = new FormData();
       formData.append('file', uploadFile);
+
       const token = localStorage.getItem('token');
-      await axios.post('http://localhost:8000/api/lead-distributor/upload', formData, {
-        headers: { 
-          'Content-Type': 'multipart/form-data',
-          Authorization: `Bearer ${token}`
+
+      await axios.post(
+        'http://localhost:8000/api/lead-distributor/upload',
+        formData,
+        {
+          headers: {
+            'Content-Type': 'multipart/form-data',
+            Authorization: `Bearer ${token}`
+          }
         }
-      });
+      );
+
       setSuccess('Contacts uploaded successfully!');
-      setTimeout(() => setSuccess(''), 3000);
+
+      setTimeout(() => {
+        setSuccess('');
+      }, 3000);
+
     } catch (err) {
+      console.error(err);
       alert('Error uploading file');
+
     } finally {
       setLoading(false);
     }
   };
 
+  // Add staff member
   const handleAddStaff = async () => {
+    if (!staffName || !staffEmail) {
+      alert('Please enter staff name and email');
+      return;
+    }
+
     setLoading(true);
+
     try {
       const token = localStorage.getItem('token');
-      await axios.post('http://localhost:8000/api/lead-distributor/staff', {
-        name: staffName,
-        email: staffEmail
-      }, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+
+      await axios.post(
+        'http://localhost:8000/api/lead-distributor/staff',
+        {
+          name: staffName,
+          email: staffEmail
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        }
+      );
+
       setSuccess('Staff member added!');
+
       setStaffName('');
       setStaffEmail('');
-      setTimeout(() => setSuccess(''), 3000);
+
+      setTimeout(() => {
+        setSuccess('');
+      }, 3000);
+
     } catch (err) {
+      console.error(err);
       alert('Error adding staff member');
+
     } finally {
       setLoading(false);
     }
   };
 
+  // Save configuration
   const handleConfigure = async () => {
     setLoading(true);
+
     try {
       const token = localStorage.getItem('token');
-      await axios.post('http://localhost:8000/api/lead-distributor/configure', {
-        contacts_per_person: contactsPerDay,
-        selected_days: selectedDays,
-        send_time: sendTime,
-        enabled: true,
-        exclusion_window: 0
-      }, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+
+      await axios.post(
+        'http://localhost:8000/api/lead-distributor/configure',
+        {
+          contacts_per_person: contactsPerDay,
+          selected_days: selectedDays,
+          send_time: sendTime,
+          enabled: true,
+          exclusion_window: 0
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        }
+      );
+
       setSuccess('Configuration saved!');
-      setTimeout(() => setSuccess(''), 3000);
+
+      setTimeout(() => {
+        setSuccess('');
+      }, 3000);
+
     } catch (err) {
+      console.error(err);
       alert('Error saving configuration');
+
     } finally {
       setLoading(false);
     }
   };
 
+  // Send emails immediately
+  const handleSendEmails = async () => {
+    try {
+      const token = localStorage.getItem('token');
+
+      await axios.post(
+        'http://localhost:8000/api/lead-distributor/send-emails',
+        {},
+        {
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        }
+      );
+
+      setSuccess('Emails sent to all staff!');
+
+      setTimeout(() => {
+        setSuccess('');
+      }, 3000);
+
+    } catch (err) {
+      console.error(err);
+      alert('Error sending emails');
+    }
+  };
+
+  // Get statistics
   const handleGetStats = async () => {
     try {
       const token = localStorage.getItem('token');
-      const response = await axios.get('http://localhost:8000/api/lead-distributor/stats', {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+
+      const response = await axios.get(
+        'http://localhost:8000/api/lead-distributor/stats',
+        {
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        }
+      );
+
       setStats(response.data);
+
     } catch (err) {
+      console.error(err);
       alert('Error fetching stats');
     }
   };
 
   return (
     <div>
+
       <h2>Lead Distributor</h2>
 
-      <div style={{ marginBottom: '20px', padding: '15px', backgroundColor: '#f0f0f0', borderRadius: '4px' }}>
+      {/* SUCCESS MESSAGE */}
+      {success && (
+        <p
+          style={{
+            color: 'green',
+            backgroundColor: '#e8f5e9',
+            padding: '10px',
+            borderRadius: '4px'
+          }}
+        >
+          {success}
+        </p>
+      )}
+
+      {/* ============================= */}
+      {/* UPLOAD CONTACTS */}
+      {/* ============================= */}
+
+      <div
+        style={{
+          marginBottom: '20px',
+          padding: '15px',
+          backgroundColor: '#f0f0f0',
+          borderRadius: '4px'
+        }}
+      >
         <h3>Upload Contacts</h3>
+
         <input
           type="file"
           accept=".csv,.xlsx"
@@ -110,29 +252,67 @@ export default function LeadDistributor() {
           disabled={loading}
           style={{ marginBottom: '10px' }}
         />
-        <p style={{ fontSize: '12px', color: '#666' }}>Upload CSV or Excel file with phone numbers</p>
+
+        <p
+          style={{
+            fontSize: '12px',
+            color: '#666'
+          }}
+        >
+          Upload CSV or Excel file with phone numbers
+        </p>
+
+        {file && (
+          <p style={{ fontSize: '13px' }}>
+            Selected file: <strong>{file.name}</strong>
+          </p>
+        )}
       </div>
 
-      <div style={{ marginBottom: '20px', padding: '15px', backgroundColor: '#f0f0f0', borderRadius: '4px' }}>
+      {/* ============================= */}
+      {/* ADD STAFF MEMBER */}
+      {/* ============================= */}
+
+      <div
+        style={{
+          marginBottom: '20px',
+          padding: '15px',
+          backgroundColor: '#f0f0f0',
+          borderRadius: '4px'
+        }}
+      >
         <h3>Add Staff Member</h3>
+
         <div style={{ marginBottom: '10px' }}>
           <input
             type="text"
             placeholder="Staff name"
             value={staffName}
             onChange={(e) => setStaffName(e.target.value)}
-            style={{ width: '100%', padding: '10px', marginBottom: '10px' }}
+            style={{
+              width: '100%',
+              padding: '10px',
+              marginBottom: '10px',
+              boxSizing: 'border-box'
+            }}
           />
         </div>
+
         <div style={{ marginBottom: '10px' }}>
           <input
             type="email"
             placeholder="Staff email"
             value={staffEmail}
             onChange={(e) => setStaffEmail(e.target.value)}
-            style={{ width: '100%', padding: '10px', marginBottom: '10px' }}
+            style={{
+              width: '100%',
+              padding: '10px',
+              marginBottom: '10px',
+              boxSizing: 'border-box'
+            }}
           />
         </div>
+
         <button
           onClick={handleAddStaff}
           disabled={loading}
@@ -149,29 +329,70 @@ export default function LeadDistributor() {
         </button>
       </div>
 
-      <div style={{ marginBottom: '20px', padding: '15px', backgroundColor: '#f0f0f0', borderRadius: '4px' }}>
+      {/* ============================= */}
+      {/* CONFIGURATION */}
+      {/* ============================= */}
+
+      <div
+        style={{
+          marginBottom: '20px',
+          padding: '15px',
+          backgroundColor: '#f0f0f0',
+          borderRadius: '4px'
+        }}
+      >
         <h3>Configuration</h3>
+
+        {/* Contacts per person */}
         <div style={{ marginBottom: '10px' }}>
-          <label>Contacts per person per day:</label>
+          <label>
+            Contacts per person per day:
+          </label>
+
           <input
             type="number"
             value={contactsPerDay}
-            onChange={(e) => setContactsPerDay(parseInt(e.target.value))}
-            style={{ padding: '10px', marginLeft: '10px' }}
+            onChange={(e) =>
+              setContactsPerDay(parseInt(e.target.value) || 0)
+            }
+            style={{
+              padding: '10px',
+              marginLeft: '10px'
+            }}
           />
         </div>
+
+        {/* Send Time */}
         <div style={{ marginBottom: '10px' }}>
-          <label>Send Time:</label>
+          <label>
+            Send Time:
+          </label>
+
           <input
             type="time"
             value={sendTime}
             onChange={(e) => setSendTime(e.target.value)}
-            style={{ padding: '10px', marginLeft: '10px' }}
+            style={{
+              padding: '10px',
+              marginLeft: '10px'
+            }}
           />
         </div>
+
+        {/* Select Days */}
         <div style={{ marginBottom: '10px' }}>
-          <label>Select Days:</label>
-          <div style={{ display: 'flex', gap: '10px', marginTop: '10px', flexWrap: 'wrap' }}>
+          <label>
+            Select Days:
+          </label>
+
+          <div
+            style={{
+              display: 'flex',
+              gap: '10px',
+              marginTop: '10px',
+              flexWrap: 'wrap'
+            }}
+          >
             {days.map(day => (
               <label key={day}>
                 <input
@@ -179,11 +400,16 @@ export default function LeadDistributor() {
                   checked={selectedDays.includes(day)}
                   onChange={() => handleDayToggle(day)}
                 />
-                {' ' + day.charAt(0).toUpperCase() + day.slice(1)}
+
+                {' '}
+
+                {day.charAt(0).toUpperCase() + day.slice(1)}
               </label>
             ))}
           </div>
         </div>
+
+        {/* Save Configuration */}
         <button
           onClick={handleConfigure}
           disabled={loading}
@@ -198,9 +424,32 @@ export default function LeadDistributor() {
         >
           {loading ? 'Saving...' : 'Save Configuration'}
         </button>
+
+        {/* SEND EMAIL NOW */}
+        <button
+          onClick={handleSendEmails}
+          disabled={loading}
+          style={{
+            padding: '10px 20px',
+            backgroundColor: '#17a2b8',
+            color: 'white',
+            border: 'none',
+            borderRadius: '4px',
+            cursor: loading ? 'not-allowed' : 'pointer',
+            marginTop: '10px',
+            marginLeft: '10px'
+          }}
+        >
+          📧 Send Email Now
+        </button>
       </div>
 
+      {/* ============================= */}
+      {/* STATISTICS */}
+      {/* ============================= */}
+
       <div style={{ marginBottom: '20px' }}>
+
         <button
           onClick={handleGetStats}
           style={{
@@ -214,16 +463,34 @@ export default function LeadDistributor() {
         >
           Get Statistics
         </button>
+
         {stats && (
-          <div style={{ marginTop: '10px', padding: '10px', backgroundColor: '#e7f3ff', borderRadius: '4px' }}>
-            <p>Total Contacts: {stats.total_contacts}</p>
-            <p>Staff Count: {stats.staff_count}</p>
-            <p>Distributed Today: {stats.distributed_today}</p>
+          <div
+            style={{
+              marginTop: '10px',
+              padding: '10px',
+              backgroundColor: '#e7f3ff',
+              borderRadius: '4px'
+            }}
+          >
+            <p>
+              Total Contacts: {stats.total_contacts}
+            </p>
+
+            <p>
+              Staff Count: {stats.staff_count}
+            </p>
+
+            <p>
+              Distributed Today: {stats.distributed_today}
+            </p>
           </div>
         )}
+
       </div>
 
-      {success && <p style={{ color: 'green' }}>{success}</p>}
     </div>
   );
 }
+
+

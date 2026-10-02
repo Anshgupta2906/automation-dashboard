@@ -189,3 +189,54 @@ async def get_stats(db: Session = Depends(get_db)):
         "staff_count": staff_count,
         "distributed_today": today_distributed
     }
+@router.post("/send-emails")
+async def send_emails_to_staff(staff_id: int = None, db: Session = Depends(get_db)):
+    """Send emails with today's leads to all staff (or specific staff)"""
+    try:
+        from datetime import date
+        from backend.services.email_service import send_leads_email
+        from backend.models.distribution import StaffMember, DistributionHistory, DistributionContact
+        
+        today = date.today()
+        
+        # Get staff members
+        if staff_id:
+            staff_list = db.query(StaffMember).filter(StaffMember.id == staff_id).all()
+        else:
+            staff_list = db.query(StaffMember).all()
+        
+        sent_count = 0
+        
+        for staff in staff_list:
+            # Get today's contacts for this staff
+            history = db.query(DistributionHistory).filter(
+                DistributionHistory.staff_id == staff.id,
+                DistributionHistory.assigned_date == today
+            ).all()
+            
+            if not history:
+                continue
+            
+            # Get contact details
+            contact_ids = [h.contact_id for h in history]
+            contacts = db.query(DistributionContact).filter(
+                DistributionContact.id.in_(contact_ids)
+            ).all()
+            
+            # Convert to dict for email
+            contact_list = [{"phone": c.phone, "name": c.name or "N/A"} for c in contacts]
+            
+            # Send email
+            success = send_leads_email(staff.email, staff.name, contact_list)
+            
+            if success:
+                sent_count += 1
+        
+        return {
+            "status": "success",
+            "message": f"Emails sent to {sent_count} staff members",
+            "emails_sent": sent_count
+        }
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

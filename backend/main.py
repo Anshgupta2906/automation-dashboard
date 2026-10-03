@@ -1,3 +1,4 @@
+import logging
 import os
 from contextlib import asynccontextmanager
 
@@ -14,6 +15,8 @@ from backend.routes.message_shooter import router as message_shooter_router
 from backend.routes.test import router as test_router
 from backend.schema_compat import ensure_schema_compatibility
 from backend.services.scheduler_service import start_scheduler, stop_scheduler
+
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
@@ -64,5 +67,6 @@ async def health():
         with engine.connect() as connection:
             connection.execute(text("SELECT 1"))
         return {"status": "ok", "database": "ok"}
-    except Exception as exc:
-        raise HTTPException(status_code=503, detail=f"Database unavailable: {exc}")
+    except Exception:
+        logger.exception("Database health check failed")
+        raise HTTPException(status_code=503, detail="Database unavailable")

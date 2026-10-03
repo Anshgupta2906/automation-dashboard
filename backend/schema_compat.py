@@ -23,6 +23,14 @@ def ensure_schema_compatibility() -> None:
         ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE
         """,
         """
+        ALTER TABLE call_logs
+        ADD COLUMN IF NOT EXISTS provider_call_id VARCHAR
+        """,
+        """
+        CREATE INDEX IF NOT EXISTS ix_call_logs_provider_call_id
+        ON call_logs (provider_call_id)
+        """,
+        """
         CREATE INDEX IF NOT EXISTS ix_distribution_history_staff_contact
         ON distribution_history (staff_id, contact_id)
         """,

@@ -17,6 +17,12 @@ const inputStyle = {
   borderRadius: 8,
 };
 
+const statusMeta = {
+  running: { label: "Running", background: "#ecfdf3", color: "#067647" },
+  paused: { label: "Paused", background: "#fffaeb", color: "#b54708" },
+  stopped: { label: "Stopped", background: "#f2f4f7", color: "#475467" },
+};
+
 export default function CallingSystem() {
   const [staff, setStaff] = useState([]);
   const [staffId, setStaffId] = useState("");
@@ -24,6 +30,7 @@ export default function CallingSystem() {
   const [stats, setStats] = useState(null);
   const [logs, setLogs] = useState([]);
   const [status, setStatus] = useState("stopped");
+  const [bufferSeconds, setBufferSeconds] = useState(7);
   const [loading, setLoading] = useState(false);
   const [staffLoading, setStaffLoading] = useState(false);
   const [notice, setNotice] = useState("");
@@ -57,8 +64,6 @@ export default function CallingSystem() {
       return;
     }
 
-    setLoading(true);
-    setError("");
     try {
       const [statusResponse, statsResponse, logsResponse, nextResponse] = await Promise.all([
         api.get("/api/calling/status", { params: { staff_id: id } }),
@@ -67,14 +72,13 @@ export default function CallingSystem() {
         api.get("/api/calling/next", { params: { staff_id: id } }),
       ]);
 
-      setStatus(statusResponse.data.is_calling ? "active" : "stopped");
+      setStatus(statusResponse.data.status || (statusResponse.data.is_calling ? "running" : "stopped"));
+      setBufferSeconds(statusResponse.data.buffer_seconds || 7);
       setStats(statsResponse.data);
       setLogs(Array.isArray(logsResponse.data) ? logsResponse.data : []);
       setNextLead(nextResponse.data.status === "ready" ? nextResponse.data.contact : null);
     } catch (err) {
       setError(err.response?.data?.detail || "Unable to refresh calling data.");
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -84,6 +88,12 @@ export default function CallingSystem() {
 
   useEffect(() => {
     if (staffId) refresh(staffId);
+  }, [staffId]);
+
+  useEffect(() => {
+    if (!staffId) return undefined;
+    const interval = setInterval(() => refresh(staffId), 3000);
+    return () => clearInterval(interval);
   }, [staffId]);
 
   const addStaff = async (event) => {
@@ -120,14 +130,47 @@ export default function CallingSystem() {
     setLoading(true);
     setError("");
     try {
-      await api.post("/api/calling/start", {
+      const { data } = await api.post("/api/calling/start", {
         staff_id: Number(staffId),
-        buffer_seconds: 10,
+        buffer_seconds: Number(bufferSeconds),
       });
-      setNotice("Calling queue started. Calls are opened manually from the selected phone.");
+      setNotice(data.message);
       await refresh();
     } catch (err) {
       setError(err.response?.data?.detail || "Unable to start queue.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const pause = async () => {
+    if (!staffId) return;
+    setLoading(true);
+    setError("");
+    try {
+      await api.post("/api/calling/pause", { staff_id: Number(staffId) });
+      setNotice("Calling paused. The next lead will remain untouched until resume.");
+      await refresh();
+    } catch (err) {
+      setError(err.response?.data?.detail || "Unable to pause queue.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const resume = async () => {
+    if (!staffId) return;
+    setLoading(true);
+    setError("");
+    try {
+      const { data } = await api.post("/api/calling/resume", {
+        staff_id: Number(staffId),
+        buffer_seconds: Number(bufferSeconds),
+      });
+      setNotice(data.status === "resumed" ? "Calling resumed from the next unattempted lead." : "Calling resumed.");
+      await refresh();
+    } catch (err) {
+      setError(err.response?.data?.detail || "Unable to resume queue.");
     } finally {
       setLoading(false);
     }
@@ -172,13 +215,14 @@ export default function CallingSystem() {
   };
 
   const selectedStaff = staff.find((member) => String(member.id) === String(staffId));
+  const meta = statusMeta[status] || statusMeta.stopped;
 
   return (
     <div>
       <h2 style={{ marginTop: 0 }}>Calling Queue</h2>
       <p style={{ color: "#667085" }}>
-        Manage staff, select a caller, and work through today's assigned leads.
-        Telephony integration can be added later without changing this workflow.
+        Each staff member has an independent persistent calling session. Start, pause, resume,
+        and stop are saved on the server so progress is not lost on refresh or restart.
       </p>
 
       {notice && (
@@ -189,13 +233,13 @@ export default function CallingSystem() {
 
       {error && (
         <div style={{ padding: 12, background: "#fef3f2", color: "#b42318", borderRadius: 8, marginBottom: 16 }}>
-          <div>{error}</div>
+          {error}
           <button
-            onClick={loadStaff}
+            onClick={() => { setError(""); loadStaff(); }}
             disabled={staffLoading}
-            style={{ marginTop: 8, padding: "7px 11px", border: "1px solid #fda29b", borderRadius: 7, background: "#fff", color: "#b42318" }}
+            style={{ marginLeft: 10, padding: "6px 10px", border: "1px solid #fda29b", borderRadius: 7, background: "#fff", color: "#b42318" }}
           >
-            {staffLoading ? "Retrying..." : "Retry staff loading"}
+            Retry
           </button>
         </div>
       )}
@@ -207,28 +251,9 @@ export default function CallingSystem() {
         </p>
 
         <form onSubmit={addStaff} style={{ display: "grid", gridTemplateColumns: "minmax(180px,1fr) minmax(220px,1fr) auto", gap: 10, marginBottom: 16 }}>
-          <input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="Staff full name"
-            autoComplete="name"
-            required
-            style={inputStyle}
-          />
-          <input
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            type="email"
-            placeholder="Staff email"
-            autoComplete="email"
-            required
-            style={inputStyle}
-          />
-          <button
-            type="submit"
-            disabled={loading}
-            style={{ padding: "11px 16px", border: 0, borderRadius: 8, background: "#111827", color: "#fff", fontWeight: 700 }}
-          >
+          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Staff full name" autoComplete="name" required style={inputStyle} />
+          <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" placeholder="Staff email" autoComplete="email" required style={inputStyle} />
+          <button type="submit" disabled={loading} style={{ padding: "11px 16px", border: 0, borderRadius: 8, background: "#111827", color: "#fff", fontWeight: 700 }}>
             {loading ? "Saving..." : "Add staff"}
           </button>
         </form>
@@ -236,7 +261,7 @@ export default function CallingSystem() {
         {staffLoading ? (
           <p style={{ color: "#667085" }}>Loading staff...</p>
         ) : staff.length === 0 ? (
-          <p style={{ color: "#667085", marginBottom: 0 }}>No staff members yet. Add your first caller above.</p>
+          <p style={{ color: "#667085", marginBottom: 0 }}>No staff members yet.</p>
         ) : (
           <div style={{ display: "grid", gap: 8 }}>
             {staff.map((member) => (
@@ -257,48 +282,48 @@ export default function CallingSystem() {
       <section style={cardStyle}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
           <label style={{ fontWeight: 600 }}>Caller</label>
-          <select
-            value={staffId}
-            onChange={(e) => setStaffId(e.target.value)}
-            disabled={staffLoading || loading}
-            style={{ padding: 10, minWidth: 220, border: "1px solid #d0d5dd", borderRadius: 8 }}
-          >
+          <select value={staffId} onChange={(e) => setStaffId(e.target.value)} disabled={staffLoading || loading} style={{ padding: 10, minWidth: 220, border: "1px solid #d0d5dd", borderRadius: 8 }}>
             <option value="">Select staff</option>
-            {staff.map((member) => (
-              <option key={member.id} value={member.id}>
-                {member.name}
-              </option>
-            ))}
+            {staff.map((member) => <option key={member.id} value={member.id}>{member.name}</option>)}
           </select>
 
-          <button
-            onClick={start}
-            disabled={!staffId || loading || status === "active"}
-            style={{ padding: "9px 14px", border: 0, borderRadius: 8, background: "#16a34a", color: "#fff" }}
-          >
-            Start queue
+          <label style={{ fontWeight: 600 }}>Buffer</label>
+          <select value={bufferSeconds} onChange={(e) => setBufferSeconds(Number(e.target.value))} disabled={loading} style={{ padding: 10, border: "1px solid #d0d5dd", borderRadius: 8 }}>
+            <option value={5}>5 sec</option>
+            <option value={7}>7 sec</option>
+            <option value={10}>10 sec</option>
+          </select>
+
+          <button onClick={start} disabled={!staffId || loading || status === "running"} style={{ padding: "9px 14px", border: 0, borderRadius: 8, background: "#16a34a", color: "#fff" }}>
+            Start Queue
           </button>
 
-          <button
-            onClick={stop}
-            disabled={!staffId || loading || status !== "active"}
-            style={{ padding: "9px 14px", border: 0, borderRadius: 8, background: "#dc2626", color: "#fff" }}
-          >
+          {status === "running" ? (
+            <button onClick={pause} disabled={!staffId || loading} style={{ padding: "9px 14px", border: 0, borderRadius: 8, background: "#d97706", color: "#fff" }}>
+              Pause
+            </button>
+          ) : (
+            <button onClick={resume} disabled={!staffId || loading || status !== "paused"} style={{ padding: "9px 14px", border: 0, borderRadius: 8, background: "#2563eb", color: "#fff" }}>
+              Resume
+            </button>
+          )}
+
+          <button onClick={stop} disabled={!staffId || loading || status === "stopped"} style={{ padding: "9px 14px", border: 0, borderRadius: 8, background: "#dc2626", color: "#fff" }}>
             Stop
           </button>
 
-          <button
-            onClick={() => refresh()}
-            disabled={!staffId || loading}
-            style={{ padding: "9px 14px", border: "1px solid #d0d5dd", borderRadius: 8, background: "#fff" }}
-          >
+          <button onClick={() => refresh()} disabled={!staffId || loading} style={{ padding: "9px 14px", border: "1px solid #d0d5dd", borderRadius: 8, background: "#fff" }}>
             Refresh
           </button>
         </div>
 
         {selectedStaff && (
-          <div style={{ marginTop: 10, color: "#667085", fontSize: 13 }}>
-            {selectedStaff.name} · {selectedStaff.email} · Queue: {status}
+          <div style={{ marginTop: 12, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+            <strong>{selectedStaff.name}</strong>
+            <span style={{ padding: "4px 9px", borderRadius: 999, background: meta.background, color: meta.color, fontSize: 13, fontWeight: 700 }}>
+              {meta.label}
+            </span>
+            <span style={{ color: "#667085", fontSize: 13 }}>Auto-dial provider: pending connection</span>
           </div>
         )}
       </section>
@@ -330,21 +355,12 @@ export default function CallingSystem() {
           <>
             <strong>{nextLead.name || "Unnamed lead"}</strong>
             <div style={{ margin: "6px 0 16px", color: "#667085" }}>{nextLead.phone}</div>
-            <a
-              href={`tel:${nextLead.phone}`}
-              style={{ display: "inline-block", padding: "9px 14px", background: "#2563eb", color: "#fff", borderRadius: 8, textDecoration: "none", marginRight: 8 }}
-            >
-              Call from phone
+            <a href={`tel:${nextLead.phone}`} style={{ display: "inline-block", padding: "9px 14px", background: "#2563eb", color: "#fff", borderRadius: 8, textDecoration: "none", marginRight: 8 }}>
+              Manual phone fallback
             </a>
-            <button onClick={() => complete("answered")} disabled={loading} style={{ padding: "9px 14px", marginRight: 6 }}>
-              Answered
-            </button>
-            <button onClick={() => complete("no_answer")} disabled={loading} style={{ padding: "9px 14px", marginRight: 6 }}>
-              No answer
-            </button>
-            <button onClick={() => complete("busy")} disabled={loading} style={{ padding: "9px 14px" }}>
-              Busy
-            </button>
+            <button onClick={() => complete("answered")} disabled={loading} style={{ padding: "9px 14px", marginRight: 6 }}>Answered</button>
+            <button onClick={() => complete("no_answer")} disabled={loading} style={{ padding: "9px 14px", marginRight: 6 }}>No answer</button>
+            <button onClick={() => complete("busy")} disabled={loading} style={{ padding: "9px 14px" }}>Busy</button>
           </>
         )}
       </section>

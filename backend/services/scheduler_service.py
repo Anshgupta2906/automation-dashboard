@@ -1,147 +1,139 @@
-from apscheduler.schedulers.background import BackgroundScheduler
-from apscheduler.triggers.cron import CronTrigger
-from sqlalchemy.orm import Session
-from backend.database import SessionLocal
-from backend.models.distribution import DistributionContact, StaffMember, DistributionHistory
-from backend.models.message import MessageContact, MessageLog
-import random
-from datetime import date
+import os
+from datetime import date, datetime, time
+from zoneinfo import ZoneInfo
 
-scheduler = BackgroundScheduler()
+from apscheduler.schedulers.background import BackgroundScheduler
+from sqlalchemy import and_
+
+from backend.database import SessionLocal
+from backend.models.distribution import DistributionContact, DistributionHistory, StaffMember
+from backend.models.message import MessageCampaign, MessageContact, MessageLog
+
+scheduler = BackgroundScheduler(timezone=ZoneInfo(os.getenv("APP_TIMEZONE", "Asia/Kolkata")))
+
 
 def distribute_leads_job():
-    """Job that runs daily at 8 AM to distribute leads"""
     db = SessionLocal()
     try:
-        print("🔔 Starting lead distribution job...")
-        
-        # Get all staff members
-        staff_members = db.query(StaffMember).all()
-        if not staff_members:
-            print("❌ No staff members configured")
-            return
-        
-        # Get contacts not distributed today
         today = date.today()
-        distributed_today = db.query(DistributionHistory).filter(
-            DistributionHistory.assigned_date == today
-        ).all()
-        
-        distributed_contact_ids = {d.contact_id for d in distributed_today}
-        
-        # Get available contacts
-        all_contacts = db.query(DistributionContact).all()
-        available_contacts = [c for c in all_contacts if c.id not in distributed_contact_ids]
-        
-        if not available_contacts:
-            print("⚠️ No new contacts available for distribution")
-            return
-        
-        # Distribute 300 contacts per staff member
-        contacts_per_person = 300
-        total_distributed = 0
-        
+        staff_members = db.query(StaffMember).all()
+
         for staff in staff_members:
-            # Pick random contacts for this staff member
-            if len(available_contacts) >= contacts_per_person:
-                selected = random.sample(available_contacts, contacts_per_person)
-                available_contacts = [c for c in available_contacts if c not in selected]
-            else:
-                selected = available_contacts
-                available_contacts = []
-            
-            # Save to distribution history
-            for contact in selected:
-                history = DistributionHistory(
+            assigned_today = db.query(DistributionHistory).filter(
+                DistributionHistory.staff_id == staff.id,
+                DistributionHistory.assigned_date == today,
+            ).count()
+            capacity = max(0, 300 - assigned_today)
+            if not capacity:
+                continue
+
+            contacts = (
+                db.query(DistributionContact)
+                .outerjoin(
+                    DistributionHistory,
+                    and_(
+                        DistributionHistory.contact_id == DistributionContact.id,
+                        DistributionHistory.assigned_date == today,
+                    ),
+                )
+                .filter(
+                    DistributionContact.broker_id == staff.broker_id,
+                    DistributionHistory.id.is_(None),
+                )
+                .order_by(DistributionContact.id)
+                .limit(capacity)
+                .all()
+            )
+
+            for contact in contacts:
+                db.add(DistributionHistory(
                     contact_id=contact.id,
                     staff_id=staff.id,
-                    assigned_date=today
-                )
-                db.add(history)
-                total_distributed += 1
-        
+                    assigned_date=today,
+                ))
+            db.flush()
+
         db.commit()
-        
-        print(f"✅ Lead distribution complete: {total_distributed} contacts distributed to {len(staff_members)} staff")
-    
-    except Exception as e:
-        print(f"❌ Error in lead distribution: {str(e)}")
-    
+    except Exception:
+        db.rollback()
     finally:
         db.close()
 
-def send_messages_job():
-    """Job that runs daily at 9 AM to send messages"""
+
+def queue_due_message_campaigns():
     db = SessionLocal()
     try:
-        print("🔔 Starting message sending job...")
-        
-        # Get all message contacts
-        contacts = db.query(MessageContact).all()
-        
-        if not contacts:
-            print("❌ No contacts to send messages to")
-            return
-        
-        sent_count = 0
-        failed_count = 0
-        
-        for contact in contacts:
-            try:
-                # TODO: Integrate with SMS/WhatsApp API here
-                # For now, just log as sent
-                log = MessageLog(
+        now = datetime.now(scheduler.timezone)
+        today = now.date()
+        current_day = now.strftime("%A").lower()
+        current_time = now.strftime("%H:%M")
+        day_start = datetime.combine(today, time.min)
+
+        campaigns = db.query(MessageCampaign).filter(
+            MessageCampaign.enabled.is_(True),
+            MessageCampaign.send_time == current_time,
+        ).all()
+
+        for campaign in campaigns:
+            if current_day not in {day.strip().lower() for day in campaign.selected_days.split(",") if day.strip()}:
+                continue
+
+            existing_contact_ids = {
+                contact_id
+                for (contact_id,) in db.query(MessageLog.contact_id).filter(
+                    MessageLog.campaign_id == campaign.id,
+                    MessageLog.created_at >= day_start,
+                ).all()
+            }
+
+            contacts_query = db.query(MessageContact).filter(
+                MessageContact.broker_id == campaign.broker_id
+            )
+            if existing_contact_ids:
+                contacts_query = contacts_query.filter(~MessageContact.id.in_(existing_contact_ids))
+
+            contacts = contacts_query.order_by(MessageContact.id).all()
+            for contact in contacts:
+                db.add(MessageLog(
                     contact_id=contact.id,
-                    status="sent",
-                    channel="placeholder"
-                )
-                db.add(log)
-                sent_count += 1
-            except Exception as e:
-                log = MessageLog(
-                    contact_id=contact.id,
-                    status="failed",
-                    channel="placeholder"
-                )
-                db.add(log)
-                failed_count += 1
-        
+                    campaign_id=campaign.id,
+                    status="queued",
+                    channel=campaign.channel,
+                ))
+
         db.commit()
-        
-        print(f"✅ Message sending complete: {sent_count} sent, {failed_count} failed")
-    
-    except Exception as e:
-        print(f"❌ Error in message sending: {str(e)}")
-    
+    except Exception:
+        db.rollback()
     finally:
         db.close()
 
+
 def start_scheduler():
-    """Start the background scheduler"""
-    if not scheduler.running:
-        # Schedule lead distribution at 8 AM daily
-        scheduler.add_job(
-            distribute_leads_job,
-            trigger=CronTrigger(hour=8, minute=0),
-            id="distribute_leads",
-            name="Distribute leads at 8 AM",
-            replace_existing=True
-        )
-        
-        # Schedule message sending at 9 AM daily
-        scheduler.add_job(
-            send_messages_job,
-            trigger=CronTrigger(hour=9, minute=0),
-            id="send_messages",
-            name="Send messages at 9 AM",
-            replace_existing=True
-        )
-        
-        scheduler.start()
-        print("✅ Scheduler started!")
+    if scheduler.running:
+        return
+
+    scheduler.add_job(
+        distribute_leads_job,
+        "cron",
+        hour=8,
+        minute=0,
+        id="distribute_leads",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+    )
+    scheduler.add_job(
+        queue_due_message_campaigns,
+        "interval",
+        minutes=1,
+        id="queue_message_campaigns",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+    )
+    scheduler.start()
+
 
 def stop_scheduler():
-    """Stop the background scheduler"""
     if scheduler.running:
-        scheduler.shutdown()
-        print("✅ Scheduler stopped!")
+        scheduler.shutdown(wait=False)

@@ -18,6 +18,18 @@ def ensure_schema_compatibility() -> None:
         ALTER TABLE message_logs
         ALTER COLUMN sent_at DROP DEFAULT
         """,
+        """
+        ALTER TABLE staff_members
+        ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE
+        """,
+        """
+        CREATE INDEX IF NOT EXISTS ix_distribution_history_staff_contact
+        ON distribution_history (staff_id, contact_id)
+        """,
+        """
+        CREATE INDEX IF NOT EXISTS ix_distribution_history_staff_date
+        ON distribution_history (staff_id, assigned_date)
+        """,
     ]
 
     with engine.begin() as connection:

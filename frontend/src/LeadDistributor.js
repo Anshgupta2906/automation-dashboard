@@ -1,84 +1,133 @@
-import React, { useEffect, useState } from "react";
-import api from "./api";
+import React, { useState } from 'react';
+import axios from 'axios';
 
 export default function LeadDistributor() {
-  const [staff, setStaff] = useState([]);
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [stats, setStats] = useState(null);
-  const [notice, setNotice] = useState("");
+  const [file, setFile] = useState(null);
+  const [staffName, setStaffName] = useState('');
+  const [staffEmail, setStaffEmail] = useState('');
+  const [contactsPerDay, setContactsPerDay] = useState(300);
+  const [selectedDays, setSelectedDays] = useState(['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']);
+  const [sendTime, setSendTime] = useState('08:00');
   const [loading, setLoading] = useState(false);
+  const [success, setSuccess] = useState('');
+  const [stats, setStats] = useState(null);
+  const [staffId, setStaffId] = useState(1);
+  const token = localStorage.getItem('token');
+  const headers = { Authorization: `Bearer ${token}` };
 
-  const load = async () => {
-    try {
-      const [staffResponse, statsResponse] = await Promise.all([
-        api.get("/api/lead-distributor/staff"),
-        api.get("/api/lead-distributor/stats"),
-      ]);
-      setStaff(staffResponse.data);
-      setStats(statsResponse.data);
-    } catch (err) {
-      setNotice(err.response?.data?.detail || "Unable to load lead distributor data.");
-    }
+  const days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+
+  const handleDayToggle = (day) => {
+    setSelectedDays(prev =>
+      prev.includes(day) ? prev.filter(d => d !== day) : [...prev, day]
+    );
   };
 
-  useEffect(() => { load(); }, []);
-
-  const upload = async (event) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
+  const handleFileUpload = async (e) => {
+    const uploadFile = e.target.files[0];
+    if (!uploadFile) return;
+    
     setLoading(true);
     try {
       const formData = new FormData();
-      formData.append("file", file);
-      const { data } = await api.post("/api/lead-distributor/upload", formData);
-      setNotice(`Imported ${data.contacts_added} contacts. ${data.duplicates_skipped} duplicates skipped.`);
-      await load();
+      formData.append('file', uploadFile);
+      const response = await axios.post('http://localhost:8000/api/lead-distributor/upload', formData, {
+        headers: { 
+          'Content-Type': 'multipart/form-data',
+          Authorization: `Bearer ${token}`
+        }
+      });
+      setSuccess(`✅ ${response.data.contacts_added} contacts uploaded!`);
+      setTimeout(() => setSuccess(''), 3000);
     } catch (err) {
-      setNotice(err.response?.data?.detail || "Import failed.");
-    } finally {
-      setLoading(false);
-      event.target.value = "";
-    }
-  };
-
-  const addStaff = async (event) => {
-    event.preventDefault();
-    if (!name.trim() || !email.trim()) return setNotice("Name and email are required.");
-    setLoading(true);
-    try {
-      await api.post("/api/lead-distributor/staff", { name, email });
-      setName("");
-      setEmail("");
-      setNotice("Staff member added.");
-      await load();
-    } catch (err) {
-      setNotice(err.response?.data?.detail || "Unable to add staff member.");
+      alert('❌ Error uploading file: ' + (err.response?.data?.detail || err.message));
     } finally {
       setLoading(false);
     }
   };
 
-  const distribute = async () => {
+  const handleAddStaff = async () => {
+    // VALIDATION
+    if (!staffName.trim()) {
+      alert('❌ Please enter staff name');
+      return;
+    }
+    if (!staffEmail.trim()) {
+      alert('❌ Please enter staff email');
+      return;
+    }
+    if (!staffEmail.includes('@')) {
+      alert('❌ Please enter valid email');
+      return;
+    }
+
     setLoading(true);
     try {
-      const { data } = await api.post("/api/lead-distributor/distribute-now");
-      setNotice(`Distributed ${data.total_distributed} leads across ${data.staff_count} staff members.`);
-      await load();
+      await axios.post('http://localhost:8000/api/lead-distributor/staff', {
+        name: staffName,
+        email: staffEmail
+      }, { headers });
+      setSuccess('✅ Staff member added!');
+      setStaffName('');
+      setStaffEmail('');
+      setTimeout(() => setSuccess(''), 3000);
     } catch (err) {
-      setNotice(err.response?.data?.detail || "Distribution failed.");
+      alert('❌ Error: ' + (err.response?.data?.detail || err.message));
     } finally {
       setLoading(false);
     }
   };
 
-  const sendEmails = async () => {
+  const handleConfigure = async () => {
+    if (selectedDays.length === 0) {
+      alert('❌ Please select at least one day');
+      return;
+    }
+
     setLoading(true);
     try {
-      const { data } = await api.post("/api/lead-distributor/send-emails");
-      setNotice(`${data.emails_sent} emails sent, ${data.emails_failed} failed.`);
+      await axios.post('http://localhost:8000/api/lead-distributor/configure', {
+        contacts_per_person: contactsPerDay,
+        selected_days: selectedDays,
+        send_time: sendTime,
+        enabled: true,
+        exclusion_window: 0
+      }, { headers });
+      setSuccess('✅ Configuration saved!');
+      setTimeout(() => setSuccess(''), 3000);
     } catch (err) {
-      setNotice(err.response?.data?.detail || "Email operation failed.");
+      alert('❌ Error: ' + (err.response?.data?.detail || err.message));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleGetStats = async () => {
+    try {
+      const response = await axios.get('http://localhost:8000/api/lead-distributor/stats', {
+        headers,
+        params: { staff_id: staffId }
+      });
+      setStats(response.data);
+    } catch (err) {
+      alert('❌ Error fetching stats: ' + (err.response?.data?.detail || err.message));
+    }
+  };
+
+  const handleSendEmails = async () => {
+    setLoading(true);
+    try {
+      const response = await axios.post(
+        'http://localhost:8000/api/lead-distributor/send-emails',
+        {},
+        {
+          headers,
+          params: { staff_id: staffId }
+        }
+      );
+      alert('✅ ' + response.data.message);
+    } catch (err) {
+      alert('❌ Error: ' + (err.response?.data?.detail || err.message));
     } finally {
       setLoading(false);
     }
@@ -86,52 +135,165 @@ export default function LeadDistributor() {
 
   return (
     <div>
-      <h2 style={{ marginTop: 0 }}>Lead Distributor</h2>
-      <p style={{ color: "#667085" }}>Import leads, manage your team, and distribute up to 300 fresh leads per staff member each day.</p>
+      <h2>📊 Lead Distributor</h2>
 
-      {notice && <div style={{ padding: 12, background: "#eef4ff", borderRadius: 8, marginBottom: 16 }}>{notice}</div>}
-
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))", gap: 12, marginBottom: 20 }}>
-        {[
-          ["Total contacts", stats?.total_contacts ?? "—"],
-          ["Staff", stats?.staff_count ?? "—"],
-          ["Distributed today", stats?.distributed_today ?? "—"],
-        ].map(([label, value]) => (
-          <div key={label} style={{ padding: 18, background: "#fff", border: "1px solid #eaecf0", borderRadius: 12 }}>
-            <div style={{ color: "#667085", fontSize: 13 }}>{label}</div>
-            <strong style={{ fontSize: 25 }}>{value}</strong>
-          </div>
-        ))}
+      {/* UPLOAD CONTACTS */}
+      <div style={{ marginBottom: '20px', padding: '15px', backgroundColor: '#f0f0f0', borderRadius: '4px' }}>
+        <h3>Step 1: Upload Contacts</h3>
+        <p style={{ fontSize: '12px', color: '#666' }}>Upload CSV or Excel file with phone numbers</p>
+        <input
+          type="file"
+          accept=".csv,.xlsx"
+          onChange={handleFileUpload}
+          disabled={loading}
+          style={{ marginBottom: '10px' }}
+        />
+        {success && <p style={{ color: 'green', fontWeight: 'bold' }}>{success}</p>}
       </div>
 
-      <section style={{ padding: 20, border: "1px solid #eaecf0", borderRadius: 12, marginBottom: 20 }}>
-        <h3>Import leads</h3>
-        <input type="file" accept=".csv,.xlsx" onChange={upload} disabled={loading} />
-        <button onClick={distribute} disabled={loading} style={{ marginLeft: 12, padding: "9px 14px", border: 0, borderRadius: 8, background: "#2563eb", color: "#fff", fontWeight: 700 }}>
-          {loading ? "Working..." : "Distribute now"}
+      {/* ADD STAFF */}
+      <div style={{ marginBottom: '20px', padding: '15px', backgroundColor: '#f0f0f0', borderRadius: '4px' }}>
+        <h3>Step 2: Add Staff Members</h3>
+        <div style={{ marginBottom: '10px' }}>
+          <input
+            type="text"
+            placeholder="Staff name"
+            value={staffName}
+            onChange={(e) => setStaffName(e.target.value)}
+            style={{ width: '100%', padding: '10px', marginBottom: '10px' }}
+          />
+        </div>
+        <div style={{ marginBottom: '10px' }}>
+          <input
+            type="email"
+            placeholder="Staff email"
+            value={staffEmail}
+            onChange={(e) => setStaffEmail(e.target.value)}
+            style={{ width: '100%', padding: '10px', marginBottom: '10px' }}
+          />
+        </div>
+        <button
+          onClick={handleAddStaff}
+          disabled={loading}
+          style={{
+            padding: '10px 20px',
+            backgroundColor: '#007bff',
+            color: 'white',
+            border: 'none',
+            borderRadius: '4px',
+            cursor: loading ? 'not-allowed' : 'pointer'
+          }}
+        >
+          {loading ? 'Adding...' : 'Add Staff'}
         </button>
-        <button onClick={sendEmails} disabled={loading} style={{ marginLeft: 8, padding: "9px 14px", border: "1px solid #d0d5dd", borderRadius: 8, background: "#fff", fontWeight: 600 }}>
-          Email today's leads
-        </button>
-      </section>
+      </div>
 
-      <section style={{ padding: 20, border: "1px solid #eaecf0", borderRadius: 12, marginBottom: 20 }}>
-        <h3>Add staff member</h3>
-        <form onSubmit={addStaff} style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto", gap: 10 }}>
-          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Full name" required style={{ padding: 11, border: "1px solid #d0d5dd", borderRadius: 8 }} />
-          <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" placeholder="Email" required style={{ padding: 11, border: "1px solid #d0d5dd", borderRadius: 8 }} />
-          <button disabled={loading} style={{ padding: "11px 16px", border: 0, borderRadius: 8, background: "#111827", color: "#fff" }}>Add</button>
-        </form>
-      </section>
+      {/* CONFIGURATION */}
+      <div style={{ marginBottom: '20px', padding: '15px', backgroundColor: '#f0f0f0', borderRadius: '4px' }}>
+        <h3>Step 3: Configuration</h3>
+        
+        <div style={{ marginBottom: '10px' }}>
+          <label>Contacts per person per day:</label>
+          <input
+            type="number"
+            value={contactsPerDay}
+            onChange={(e) => setContactsPerDay(parseInt(e.target.value))}
+            style={{ padding: '10px', marginLeft: '10px' }}
+          />
+        </div>
 
-      <section>
-        <h3>Team</h3>
-        {staff.length === 0 ? <p style={{ color: "#667085" }}>No staff members yet.</p> : staff.map((member) => (
-          <div key={member.id} style={{ display: "flex", justifyContent: "space-between", padding: 14, borderBottom: "1px solid #eaecf0" }}>
-            <strong>{member.name}</strong><span style={{ color: "#667085" }}>{member.email}</span>
+        <div style={{ marginBottom: '10px' }}>
+          <label>Send Time (for distribution):</label>
+          <input
+            type="time"
+            value={sendTime}
+            onChange={(e) => setSendTime(e.target.value)}
+            style={{ padding: '10px', marginLeft: '10px' }}
+          />
+        </div>
+
+        <div style={{ marginBottom: '10px' }}>
+          <label>Select Days:</label>
+          <div style={{ display: 'flex', gap: '10px', marginTop: '10px', flexWrap: 'wrap' }}>
+            {days.map(day => (
+              <label key={day}>
+                <input
+                  type="checkbox"
+                  checked={selectedDays.includes(day)}
+                  onChange={() => handleDayToggle(day)}
+                />
+                {' ' + day.charAt(0).toUpperCase() + day.slice(1)}
+              </label>
+            ))}
           </div>
-        ))}
-      </section>
+        </div>
+
+        <button
+          onClick={handleConfigure}
+          disabled={loading}
+          style={{
+            padding: '10px 20px',
+            backgroundColor: '#28a745',
+            color: 'white',
+            border: 'none',
+            borderRadius: '4px',
+            cursor: loading ? 'not-allowed' : 'pointer',
+            marginRight: '10px'
+          }}
+        >
+          {loading ? 'Saving...' : 'Save Configuration'}
+        </button>
+
+        <button
+          onClick={handleSendEmails}
+          disabled={loading}
+          style={{
+            padding: '10px 20px',
+            backgroundColor: '#17a2b8',
+            color: 'white',
+            border: 'none',
+            borderRadius: '4px',
+            cursor: loading ? 'not-allowed' : 'pointer'
+          }}
+        >
+          {loading ? 'Sending...' : '📧 Send Emails Now'}
+        </button>
+      </div>
+
+      {/* STATS */}
+      <div style={{ marginBottom: '20px' }}>
+        <div style={{ marginBottom: '10px' }}>
+          <label>Staff ID:</label>
+          <input
+            type="number"
+            value={staffId}
+            onChange={(e) => setStaffId(parseInt(e.target.value))}
+            style={{ padding: '10px', marginLeft: '10px' }}
+          />
+        </div>
+
+        <button
+          onClick={handleGetStats}
+          style={{
+            padding: '10px 20px',
+            backgroundColor: '#17a2b8',
+            color: 'white',
+            border: 'none',
+            borderRadius: '4px',
+            cursor: 'pointer'
+          }}
+        >
+          Get Statistics
+        </button>
+
+        {stats && (
+          <div style={{ marginTop: '10px', padding: '10px', backgroundColor: '#e7f3ff', borderRadius: '4px' }}>
+            <p>📞 Total Contacts: <strong>{stats.total_contacts}</strong></p>
+            <p>👥 Staff Count: <strong>{stats.staff_count}</strong></p>
+            <p>📤 Distributed Today: <strong>{stats.distributed_today}</strong></p>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

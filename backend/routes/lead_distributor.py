@@ -6,20 +6,29 @@ from pathlib import Path
 
 import openpyxl
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
-from pydantic import EmailStr
-from sqlalchemy import and_, func
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from backend.auth import get_current_user
 from backend.database import get_db
-from backend.models.distribution import DistributionContact, DistributionHistory, StaffMember
+from backend.models.distribution import (
+    DistributionConfig as DistributionConfigModel,
+    DistributionContact,
+    DistributionHistory,
+    StaffMember,
+)
 from backend.models.user import User
-from backend.schemas.distribution_schema import DistributionConfig, StaffMemberCreate, StaffMemberResponse
+from backend.schemas.distribution_schema import (
+    DistributionConfig,
+    StaffMemberCreate,
+    StaffMemberResponse,
+    StaffMemberUpdate,
+)
 from backend.services.email_service import send_leads_email
 
 router = APIRouter(prefix="/api/lead-distributor", tags=["lead-distributor"])
 
-MAX_UPLOAD_BYTES = 50 * 1024 * 1024
+MAX_UPLOAD_BYTES = 200 * 1024 * 1024
 DEFAULT_CONTACTS_PER_PERSON = 300
 
 
@@ -72,7 +81,6 @@ def _parse_tabular_rows(rows):
         name_index = _header_index(headers, {"name", "full_name"})
         data_rows = rows[1:]
 
-        # If a header exists without a recognised phone column, infer it from the first data row.
         if phone_index is None and data_rows:
             phone_index = _find_phone_index(data_rows[0])
 
@@ -86,7 +94,6 @@ def _parse_tabular_rows(rows):
                     yield phone, name
         return
 
-    # No header: infer the phone cell from each row. Supports phone-only files and name + phone files.
     for row in rows:
         phone_index = _find_phone_index(row)
         if phone_index is None:
@@ -117,6 +124,83 @@ def parse_rows(contents: bytes, filename: str):
     yield from _parse_tabular_rows(reader)
 
 
+def _get_config(db: Session, broker_id: int) -> DistributionConfigModel | None:
+    return db.query(DistributionConfigModel).filter(
+        DistributionConfigModel.broker_id == broker_id
+    ).first()
+
+
+def _contacts_for_staff(db: Session, broker_id: int, staff_id: int, capacity: int):
+    if capacity <= 0:
+        return []
+
+    already_assigned = db.query(DistributionHistory.contact_id).filter(
+        DistributionHistory.staff_id == staff_id
+    ).subquery()
+
+    return (
+        db.query(DistributionContact)
+        .filter(
+            DistributionContact.broker_id == broker_id,
+            ~DistributionContact.id.in_(already_assigned),
+        )
+        .order_by(func.random())
+        .limit(capacity)
+        .all()
+    )
+
+
+def distribute_for_broker(db: Session, broker_id: int, contacts_per_person: int) -> dict:
+    staff_members = db.query(StaffMember).filter(
+        StaffMember.broker_id == broker_id,
+        StaffMember.is_active.is_(True),
+    ).order_by(StaffMember.id).all()
+
+    if not staff_members:
+        return {
+            "total_distributed": 0,
+            "staff_count": 0,
+            "per_staff_capacity": contacts_per_person,
+            "staff_results": [],
+        }
+
+    today = date.today()
+    total_distributed = 0
+    staff_results = []
+
+    for staff in staff_members:
+        assigned_today = db.query(DistributionHistory).filter(
+            DistributionHistory.staff_id == staff.id,
+            DistributionHistory.assigned_date == today,
+        ).count()
+
+        capacity = max(0, contacts_per_person - assigned_today)
+        contacts = _contacts_for_staff(db, broker_id, staff.id, capacity)
+
+        for contact in contacts:
+            db.add(DistributionHistory(
+                contact_id=contact.id,
+                staff_id=staff.id,
+                assigned_date=today,
+            ))
+
+        db.flush()
+        count = len(contacts)
+        total_distributed += count
+        staff_results.append({
+            "staff_id": staff.id,
+            "staff_name": staff.name,
+            "contacts_assigned": count,
+        })
+
+    return {
+        "total_distributed": total_distributed,
+        "staff_count": len(staff_members),
+        "per_staff_capacity": contacts_per_person,
+        "staff_results": staff_results,
+    }
+
+
 @router.post("/upload")
 async def upload_contacts(
     file: UploadFile = File(...),
@@ -127,7 +211,7 @@ async def upload_contacts(
 
     contents = await file.read()
     if len(contents) > MAX_UPLOAD_BYTES:
-        raise HTTPException(status_code=413, detail="File is too large. Maximum size is 50 MB.")
+        raise HTTPException(status_code=413, detail="File is too large. Maximum size is 200 MB.")
 
     suffix = Path(file.filename or "").suffix.lower()
     if suffix not in {".csv", ".xlsx"}:
@@ -184,16 +268,19 @@ def add_staff_member(
     current_user: User = Depends(get_current_user),
 ):
     email = str(staff.email).strip().lower()
-    if db.query(StaffMember).filter(
+    existing = db.query(StaffMember).filter(
         StaffMember.broker_id == current_user.id,
         func.lower(StaffMember.email) == email,
-    ).first():
+        StaffMember.is_active.is_(True),
+    ).first()
+    if existing:
         raise HTTPException(status_code=409, detail="A staff member with this email already exists")
 
     new_staff = StaffMember(
         broker_id=current_user.id,
         name=staff.name.strip(),
         email=email,
+        is_active=True,
     )
     db.add(new_staff)
     db.commit()
@@ -201,17 +288,78 @@ def add_staff_member(
     return new_staff
 
 
-@router.get("/staff")
+@router.get("/staff", response_model=list[StaffMemberResponse])
 def get_staff_members(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    return db.query(StaffMember).filter(StaffMember.broker_id == current_user.id).order_by(StaffMember.id).all()
+    return (
+        db.query(StaffMember)
+        .filter(
+            StaffMember.broker_id == current_user.id,
+            StaffMember.is_active.is_(True),
+        )
+        .order_by(StaffMember.id)
+        .all()
+    )
+
+
+@router.put("/staff/{staff_id}", response_model=StaffMemberResponse)
+def update_staff_member(
+    staff_id: int,
+    staff: StaffMemberUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    member = db.query(StaffMember).filter(
+        StaffMember.id == staff_id,
+        StaffMember.broker_id == current_user.id,
+        StaffMember.is_active.is_(True),
+    ).first()
+    if not member:
+        raise HTTPException(status_code=404, detail="Staff member not found")
+
+    email = str(staff.email).strip().lower()
+    duplicate = db.query(StaffMember).filter(
+        StaffMember.broker_id == current_user.id,
+        StaffMember.id != staff_id,
+        StaffMember.is_active.is_(True),
+        func.lower(StaffMember.email) == email,
+    ).first()
+    if duplicate:
+        raise HTTPException(status_code=409, detail="Another staff member already uses this email")
+
+    member.name = staff.name.strip()
+    member.email = email
+    db.commit()
+    db.refresh(member)
+    return member
+
+
+@router.delete("/staff/{staff_id}")
+def delete_staff_member(
+    staff_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    member = db.query(StaffMember).filter(
+        StaffMember.id == staff_id,
+        StaffMember.broker_id == current_user.id,
+        StaffMember.is_active.is_(True),
+    ).first()
+    if not member:
+        raise HTTPException(status_code=404, detail="Staff member not found")
+
+    # Keep assignment history intact. "Delete" means remove from the active team.
+    member.is_active = False
+    db.commit()
+    return {"status": "success", "message": f"{member.name} removed from active staff"}
 
 
 @router.post("/configure")
 def configure_distribution(
     config: DistributionConfig,
+    db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     require_feature(current_user)
@@ -219,7 +367,35 @@ def configure_distribution(
         raise HTTPException(status_code=400, detail="contacts_per_person must be between 1 and 5000")
     if not config.selected_days:
         raise HTTPException(status_code=400, detail="Select at least one day")
-    return {"status": "success", "message": "Configuration accepted", "config": config}
+    if not re.fullmatch(r"\d{2}:\d{2}", config.send_time):
+        raise HTTPException(status_code=400, detail="send_time must use HH:MM format")
+
+    hour, minute = map(int, config.send_time.split(":"))
+    if hour > 23 or minute > 59:
+        raise HTTPException(status_code=400, detail="Invalid send_time")
+
+    db_config = _get_config(db, current_user.id)
+    if db_config is None:
+        db_config = DistributionConfigModel(broker_id=current_user.id)
+        db.add(db_config)
+
+    db_config.contacts_per_person = config.contacts_per_person
+    db_config.selected_days = ",".join(str(day).strip().lower() for day in config.selected_days if str(day).strip())
+    db_config.send_time = config.send_time
+    db_config.enabled = config.enabled
+    db.commit()
+    db.refresh(db_config)
+
+    return {
+        "status": "success",
+        "message": "Configuration saved",
+        "config": {
+            "contacts_per_person": db_config.contacts_per_person,
+            "selected_days": db_config.selected_days.split(","),
+            "send_time": db_config.send_time,
+            "enabled": db_config.enabled,
+        },
+    }
 
 
 @router.post("/distribute-now")
@@ -229,62 +405,17 @@ def distribute_leads_now(
 ):
     require_feature(current_user)
 
-    staff_members = db.query(StaffMember).filter(StaffMember.broker_id == current_user.id).all()
-    if not staff_members:
-        raise HTTPException(status_code=400, detail="No staff members configured")
-
-    today = date.today()
-    total_distributed = 0
+    config = _get_config(db, current_user.id)
+    contacts_per_person = config.contacts_per_person if config else DEFAULT_CONTACTS_PER_PERSON
 
     try:
-        for staff in staff_members:
-            assigned_today = db.query(DistributionHistory).filter(
-                DistributionHistory.staff_id == staff.id,
-                DistributionHistory.assigned_date == today,
-            ).count()
-
-            capacity = max(0, DEFAULT_CONTACTS_PER_PERSON - assigned_today)
-            if capacity == 0:
-                continue
-
-            contacts = (
-                db.query(DistributionContact)
-                .outerjoin(
-                    DistributionHistory,
-                    and_(
-                        DistributionHistory.contact_id == DistributionContact.id,
-                        DistributionHistory.assigned_date == today,
-                    ),
-                )
-                .filter(
-                    DistributionContact.broker_id == current_user.id,
-                    DistributionHistory.id.is_(None),
-                )
-                .order_by(DistributionContact.id)
-                .limit(capacity)
-                .all()
-            )
-
-            for contact in contacts:
-                db.add(DistributionHistory(
-                    contact_id=contact.id,
-                    staff_id=staff.id,
-                    assigned_date=today,
-                ))
-            total_distributed += len(contacts)
-            db.flush()
-
+        result = distribute_for_broker(db, current_user.id, contacts_per_person)
         db.commit()
     except Exception:
         db.rollback()
         raise HTTPException(status_code=500, detail="Lead distribution failed; no changes were saved")
 
-    return {
-        "status": "success",
-        "total_distributed": total_distributed,
-        "staff_count": len(staff_members),
-        "per_staff_capacity": DEFAULT_CONTACTS_PER_PERSON,
-    }
+    return {"status": "success", **result}
 
 
 @router.get("/history")
@@ -315,8 +446,13 @@ def get_stats(
     current_user: User = Depends(get_current_user),
 ):
     require_feature(current_user)
-    staff_count = db.query(StaffMember).filter(StaffMember.broker_id == current_user.id).count()
-    total_contacts = db.query(DistributionContact).filter(DistributionContact.broker_id == current_user.id).count()
+    staff_count = db.query(StaffMember).filter(
+        StaffMember.broker_id == current_user.id,
+        StaffMember.is_active.is_(True),
+    ).count()
+    total_contacts = db.query(DistributionContact).filter(
+        DistributionContact.broker_id == current_user.id
+    ).count()
     today_distributed = (
         db.query(DistributionHistory)
         .join(StaffMember, StaffMember.id == DistributionHistory.staff_id)
@@ -330,23 +466,28 @@ def get_stats(
         "total_contacts": total_contacts,
         "staff_count": staff_count,
         "distributed_today": today_distributed,
+        "daily_capacity": staff_count * (
+            _get_config(db, current_user.id).contacts_per_person
+            if _get_config(db, current_user.id)
+            else DEFAULT_CONTACTS_PER_PERSON
+        ),
     }
 
 
 @router.post("/send-emails")
 def send_emails_to_staff(
-    staff_id: int | None = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     require_feature(current_user)
-    query = db.query(StaffMember).filter(StaffMember.broker_id == current_user.id)
-    if staff_id is not None:
-        query = query.filter(StaffMember.id == staff_id)
-    staff_list = query.all()
+    staff_list = db.query(StaffMember).filter(
+        StaffMember.broker_id == current_user.id,
+        StaffMember.is_active.is_(True),
+    ).all()
 
     sent_count = 0
     failed_count = 0
+    skipped_count = 0
     today = date.today()
 
     for staff in staff_list:
@@ -355,6 +496,7 @@ def send_emails_to_staff(
             DistributionHistory.assigned_date == today,
         ).all()
         if not history:
+            skipped_count += 1
             continue
 
         contact_ids = [item.contact_id for item in history]
@@ -373,4 +515,6 @@ def send_emails_to_staff(
         "status": "success",
         "emails_sent": sent_count,
         "emails_failed": failed_count,
+        "staff_without_leads": skipped_count,
+        "message": f"Sent {sent_count} email(s); {failed_count} failed; {skipped_count} staff had no leads today.",
     }

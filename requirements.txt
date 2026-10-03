@@ -12,4 +12,4 @@ pandas
 openpyxl
 aiofiles
 python-multipart
-apscheduler
+apscheduler==3.11.3

@@ -1,10 +1,13 @@
 fastapi
-uvicorn
+uvicorn[standard]
 sqlalchemy
 psycopg2-binary
 python-dotenv
 pydantic
 pydantic-settings
+email-validator
+python-jose[cryptography]
+argon2-cffi
 pandas
 openpyxl
 aiofiles

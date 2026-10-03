@@ -1,59 +1,87 @@
 import os
-from datetime import date, datetime, time
+from datetime import datetime, time
 from zoneinfo import ZoneInfo
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from sqlalchemy import and_
 
 from backend.database import SessionLocal
-from backend.models.distribution import DistributionContact, DistributionHistory, StaffMember
+from backend.models.distribution import DistributionConfig, DistributionHistory, StaffMember
 from backend.models.message import MessageCampaign, MessageContact, MessageLog
+from backend.routes.lead_distributor import distribute_for_broker
+from backend.services.email_service import send_leads_email
 
 scheduler = BackgroundScheduler(timezone=ZoneInfo(os.getenv("APP_TIMEZONE", "Asia/Kolkata")))
+
+
+def _send_daily_lead_emails(db, broker_id: int, today) -> tuple[int, int, int]:
+    staff_members = db.query(StaffMember).filter(
+        StaffMember.broker_id == broker_id,
+        StaffMember.is_active.is_(True),
+    ).all()
+
+    sent = failed = skipped = 0
+
+    for staff in staff_members:
+        history = db.query(DistributionHistory).filter(
+            DistributionHistory.staff_id == staff.id,
+            DistributionHistory.assigned_date == today,
+        ).all()
+
+        if not history:
+            skipped += 1
+            continue
+
+        contact_ids = [item.contact_id for item in history]
+        from backend.models.distribution import DistributionContact
+
+        contacts = db.query(DistributionContact).filter(
+            DistributionContact.broker_id == broker_id,
+            DistributionContact.id.in_(contact_ids),
+        ).all()
+
+        payload = [{"phone": c.phone, "name": c.name or "N/A"} for c in contacts]
+
+        if send_leads_email(staff.email, staff.name, payload):
+            sent += 1
+        else:
+            failed += 1
+
+    return sent, failed, skipped
 
 
 def distribute_leads_job():
     db = SessionLocal()
     try:
-        today = date.today()
-        staff_members = db.query(StaffMember).all()
+        now = datetime.now(scheduler.timezone)
+        today = now.date()
+        current_day = now.strftime("%A").lower()
+        current_time = now.strftime("%H:%M")
 
-        for staff in staff_members:
-            assigned_today = db.query(DistributionHistory).filter(
-                DistributionHistory.staff_id == staff.id,
-                DistributionHistory.assigned_date == today,
-            ).count()
-            capacity = max(0, 300 - assigned_today)
-            if not capacity:
+        configs = db.query(DistributionConfig).filter(
+            DistributionConfig.enabled.is_(True),
+            DistributionConfig.send_time == current_time,
+        ).all()
+
+        for config in configs:
+            selected_days = {
+                day.strip().lower()
+                for day in config.selected_days.split(",")
+                if day.strip()
+            }
+            if current_day not in selected_days:
                 continue
 
-            contacts = (
-                db.query(DistributionContact)
-                .outerjoin(
-                    DistributionHistory,
-                    and_(
-                        DistributionHistory.contact_id == DistributionContact.id,
-                        DistributionHistory.assigned_date == today,
-                    ),
-                )
-                .filter(
-                    DistributionContact.broker_id == staff.broker_id,
-                    DistributionHistory.id.is_(None),
-                )
-                .order_by(DistributionContact.id)
-                .limit(capacity)
-                .all()
+            result = distribute_for_broker(
+                db,
+                config.broker_id,
+                config.contacts_per_person,
             )
+            db.commit()
 
-            for contact in contacts:
-                db.add(DistributionHistory(
-                    contact_id=contact.id,
-                    staff_id=staff.id,
-                    assigned_date=today,
-                ))
-            db.flush()
+            _send_daily_lead_emails(db, config.broker_id, today)
 
-        db.commit()
+        # Keep scheduler failures isolated; one broker must not stop others.
     except Exception:
         db.rollback()
     finally:
@@ -114,9 +142,8 @@ def start_scheduler():
 
     scheduler.add_job(
         distribute_leads_job,
-        "cron",
-        hour=8,
-        minute=0,
+        "interval",
+        minutes=1,
         id="distribute_leads",
         replace_existing=True,
         max_instances=1,

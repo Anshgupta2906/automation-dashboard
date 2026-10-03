@@ -1,8 +1,9 @@
 import os
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text
 
 from backend.database import engine
 from backend.models import Base
@@ -59,4 +60,9 @@ async def root():
 
 @app.get("/health")
 async def health():
-    return {"status": "ok"}
+    try:
+        with engine.connect() as connection:
+            connection.execute(text("SELECT 1"))
+        return {"status": "ok", "database": "ok"}
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=f"Database unavailable: {exc}")

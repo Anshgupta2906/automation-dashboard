@@ -132,7 +132,6 @@ def add_staff_member(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    require_feature(current_user)
     email = str(staff.email).strip().lower()
     if db.query(StaffMember).filter(
         StaffMember.broker_id == current_user.id,
@@ -156,7 +155,6 @@ def get_staff_members(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    require_feature(current_user)
     return db.query(StaffMember).filter(StaffMember.broker_id == current_user.id).order_by(StaffMember.id).all()
 
 

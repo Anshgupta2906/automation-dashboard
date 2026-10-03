@@ -11,12 +11,14 @@ from backend.routes.calling import router as calling_router
 from backend.routes.lead_distributor import router as lead_distributor_router
 from backend.routes.message_shooter import router as message_shooter_router
 from backend.routes.test import router as test_router
+from backend.schema_compat import ensure_schema_compatibility
 from backend.services.scheduler_service import start_scheduler, stop_scheduler
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
+    ensure_schema_compatibility()
     start_scheduler()
     yield
     stop_scheduler()

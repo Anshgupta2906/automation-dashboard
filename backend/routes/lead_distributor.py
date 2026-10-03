@@ -37,33 +37,84 @@ def normalize_phone(value) -> str | None:
     return digits
 
 
+def _header_index(headers, candidates):
+    return next((i for i, header in enumerate(headers) if header in candidates), None)
+
+
+def _is_header_row(values) -> bool:
+    headers = {str(v).strip().lower() for v in values if v is not None and str(v).strip()}
+    known_headers = {
+        "phone", "mobile", "mobile_number", "phone_number", "telephone",
+        "contact", "contact_number", "name", "full_name",
+    }
+    return bool(headers & known_headers)
+
+
+def _find_phone_index(row) -> int | None:
+    for index, value in enumerate(row):
+        if normalize_phone(value):
+            return index
+    return None
+
+
+def _parse_tabular_rows(rows):
+    rows = [tuple(row) for row in rows if any(value is not None and str(value).strip() for value in row)]
+    if not rows:
+        return
+
+    first_row = rows[0]
+    if _is_header_row(first_row):
+        headers = [str(v).strip().lower() if v is not None else "" for v in first_row]
+        phone_index = _header_index(
+            headers,
+            {"phone", "mobile", "mobile_number", "phone_number", "telephone", "contact", "contact_number"},
+        )
+        name_index = _header_index(headers, {"name", "full_name"})
+        data_rows = rows[1:]
+
+        # If a header exists without a recognised phone column, infer it from the first data row.
+        if phone_index is None and data_rows:
+            phone_index = _find_phone_index(data_rows[0])
+
+        for row in data_rows:
+            if phone_index is not None and phone_index < len(row):
+                phone = normalize_phone(row[phone_index])
+                name = None
+                if name_index is not None and name_index < len(row) and row[name_index] is not None:
+                    name = str(row[name_index]).strip() or None
+                if phone:
+                    yield phone, name
+        return
+
+    # No header: infer the phone cell from each row. Supports phone-only files and name + phone files.
+    for row in rows:
+        phone_index = _find_phone_index(row)
+        if phone_index is None:
+            continue
+        phone = normalize_phone(row[phone_index])
+        name = None
+        for index, value in enumerate(row):
+            if index != phone_index and value is not None and str(value).strip():
+                name = str(value).strip()
+                break
+        if phone:
+            yield phone, name
+
+
 def parse_rows(contents: bytes, filename: str):
     suffix = Path(filename or "").suffix.lower()
     if suffix == ".xlsx":
         workbook = openpyxl.load_workbook(io.BytesIO(contents), read_only=True, data_only=True)
-        sheet = workbook.active
-        rows = sheet.iter_rows(values_only=True)
         try:
-            headers = [str(v).strip().lower() if v is not None else "" for v in next(rows)]
-        except StopIteration:
-            return
-        phone_index = next((i for i, h in enumerate(headers) if h in {"phone", "mobile", "mobile_number", "phone_number"}), 0)
-        name_index = next((i for i, h in enumerate(headers) if h in {"name", "full_name"}), None)
-        for row in rows:
-            phone = normalize_phone(row[phone_index] if phone_index < len(row) else None)
-            name = str(row[name_index]).strip() if name_index is not None and name_index < len(row) and row[name_index] else None
-            if phone:
-                yield phone, name
+            sheet = workbook.active
+            yield from _parse_tabular_rows(sheet.iter_rows(values_only=True))
+        finally:
+            workbook.close()
         return
 
     text = contents.decode("utf-8-sig")
-    reader = csv.DictReader(io.StringIO(text))
-    for row in reader:
-        phone_value = next((row.get(k) for k in ("phone", "Phone", "mobile", "Mobile", "phone_number") if row.get(k)), None)
-        name = next((row.get(k) for k in ("name", "Name", "full_name") if row.get(k)), None)
-        phone = normalize_phone(phone_value)
-        if phone:
-            yield phone, name
+    reader = csv.reader(io.StringIO(text))
+    yield from _parse_tabular_rows(reader)
 
 
 @router.post("/upload")

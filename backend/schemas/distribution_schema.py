@@ -9,6 +9,11 @@ class StaffMemberCreate(BaseModel):
     password: str = Field(min_length=8, max_length=128)
 
 
+class StaffPasswordChange(BaseModel):
+    current_password: str = Field(min_length=8, max_length=128)
+    new_password: str = Field(min_length=8, max_length=128)
+
+
 class StaffMemberUpdate(BaseModel):
     name: str
     email: EmailStr
@@ -19,6 +24,7 @@ class StaffMemberResponse(BaseModel):
     name: str
     email: str
     is_active: bool = True
+    must_change_password: bool = True
 
     class Config:
         from_attributes = True

@@ -101,6 +101,7 @@ def team_status(
             "current_call_id": session.current_call_id,
         })
 
+    db.commit()
     return result
 
 

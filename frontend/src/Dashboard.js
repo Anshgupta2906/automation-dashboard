@@ -11,7 +11,6 @@ export default function Dashboard() {
   const [deleteError, setDeleteError] = useState('');
   const [deleting, setDeleting] = useState(false);
   const [subscription, setSubscription] = useState(null);
-  const [planActionLoading, setPlanActionLoading] = useState(false);
   const [planError, setPlanError] = useState('');
   const user = JSON.parse(localStorage.getItem('user'));
 
@@ -25,35 +24,6 @@ export default function Dashboard() {
       setSubscription(response.data);
     } catch (err) {
       setPlanError(err.response?.data?.detail || 'Unable to load plan status.');
-    }
-  };
-
-  const handlePlanToggle = async () => {
-    setPlanError('');
-    const isPaused = subscription?.status === 'paused';
-    const confirmed = window.confirm(
-      isPaused
-        ? 'Resume your plan and restore staff access?'
-        : 'Pause your plan? Staff access will be disabled until you resume it.'
-    );
-
-    if (!confirmed) return;
-
-    setPlanActionLoading(true);
-    try {
-      const endpoint = isPaused
-        ? '/api/auth/subscription/resume'
-        : '/api/auth/subscription/pause';
-
-      const response = await api.post(endpoint);
-      setSubscription((current) => ({
-        ...(current || {}),
-        status: response.data.status,
-      }));
-    } catch (err) {
-      setPlanError(err.response?.data?.detail || 'Unable to update your plan.');
-    } finally {
-      setPlanActionLoading(false);
     }
   };
 
@@ -165,47 +135,20 @@ export default function Dashboard() {
       }}>
         <h3 style={{ marginTop: 0 }}>Plan & Subscription</h3>
         <p style={{ margin: '6px 0', color: '#4b5563' }}>
-          Plan: <strong>{subscription?.plan === 'all_in_one' ? 'All-in-One' : subscription?.plan || 'Loading...'}</strong>
+          Plan: <strong>{subscription?.plan === 'all_in_one' ? 'All-in-One' : subscription?.plan === 'message_shooter' ? 'Message Shooter' : subscription?.plan === 'lead_distributor' ? 'Lead Distributor' : 'No plan assigned'}</strong>
         </p>
-        <p style={{ margin: '6px 0 14px', color: '#4b5563' }}>
-          Status:{' '}
-          <strong style={{ color: subscription?.status === 'paused' ? '#b45309' : '#15803d' }}>
-            {subscription?.status === 'paused' ? 'Paused' : subscription?.status === 'active' ? 'Active' : 'Loading...'}
-          </strong>
+        <p style={{ margin: '6px 0', color: '#4b5563' }}>
+          Status: <strong>{subscription?.status || 'Loading...'}</strong>
         </p>
-
+        {subscription?.expires_at && (
+          <p style={{ margin: '6px 0', color: '#4b5563' }}>
+            Expires: <strong>{new Date(subscription.expires_at).toLocaleDateString()}</strong>
+          </p>
+        )}
         {planError && (
-          <div style={{
-            marginBottom: '10px',
-            padding: '10px',
-            background: '#fef2f2',
-            color: '#b91c1c',
-            borderRadius: '7px',
-          }}>
+          <div style={{ marginTop: '10px', padding: '10px', background: '#fef2f2', color: '#b91c1c', borderRadius: '7px' }}>
             {planError}
           </div>
-        )}
-
-        {subscription && (
-          <button
-            onClick={handlePlanToggle}
-            disabled={planActionLoading}
-            style={{
-              padding: '10px 16px',
-              backgroundColor: subscription.status === 'paused' ? '#16a34a' : '#d97706',
-              color: '#fff',
-              border: 'none',
-              borderRadius: '7px',
-              cursor: planActionLoading ? 'wait' : 'pointer',
-              fontWeight: 600,
-            }}
-          >
-            {planActionLoading
-              ? 'Updating...'
-              : subscription.status === 'paused'
-                ? 'Resume Plan'
-                : 'Pause Plan'}
-          </button>
         )}
       </div>
 

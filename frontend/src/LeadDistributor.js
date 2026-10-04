@@ -7,6 +7,7 @@ export default function LeadDistributor() {
   const [file, setFile] = useState(null);
   const [staffName, setStaffName] = useState('');
   const [staffEmail, setStaffEmail] = useState('');
+  const [staffPassword, setStaffPassword] = useState('');
   const [staffMembers, setStaffMembers] = useState([]);
   const [editingStaffId, setEditingStaffId] = useState(null);
   const [editName, setEditName] = useState('');
@@ -382,7 +383,7 @@ export default function LeadDistributor() {
 
         <div style={{
           display: 'grid',
-          gridTemplateColumns: '1fr 1fr auto',
+          gridTemplateColumns: '1fr 1fr 1fr auto',
           gap: '10px',
           marginBottom: '18px',
         }}>
@@ -398,6 +399,14 @@ export default function LeadDistributor() {
             placeholder="Staff email"
             value={staffEmail}
             onChange={(e) => setStaffEmail(e.target.value)}
+            style={{ padding: '10px', border: '1px solid #d1d5db', borderRadius: '7px' }}
+          />
+          <input
+            type="password"
+            placeholder="Initial password (8+ chars)"
+            value={staffPassword}
+            onChange={(e) => setStaffPassword(e.target.value)}
+            minLength={8}
             style={{ padding: '10px', border: '1px solid #d1d5db', borderRadius: '7px' }}
           />
           <button

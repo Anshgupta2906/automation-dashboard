@@ -3,7 +3,7 @@ from datetime import datetime
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from backend.auth import get_current_staff, get_current_user
+from backend.auth import get_current_staff, get_current_user, require_subscription_feature
 from backend.database import get_db
 from backend.models.distribution import StaffMember
 from backend.models.subscription import Subscription
@@ -89,9 +89,10 @@ def staff_login(user: UserLogin, db: Session = Depends(get_db)):
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    subscription = db.query(Subscription).filter(Subscription.user_id == staff.broker_id).first()
-    if subscription and subscription.status == "paused":
-        raise HTTPException(status_code=403, detail="The broker plan is currently paused. Staff access is unavailable.")
+    broker = db.query(User).filter(User.id == staff.broker_id).first()
+    if not broker:
+        raise HTTPException(status_code=401, detail="Broker account no longer exists")
+    require_subscription_feature(db, broker, "calling")
 
     return {
         "access_token": create_access_token({"sub": str(staff.id), "role": "staff"}),

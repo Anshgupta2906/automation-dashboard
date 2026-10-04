@@ -17,11 +17,8 @@ export default function CallingSystem() {
   const [nextLeads, setNextLeads] = useState({});
   const [staffLoading, setStaffLoading] = useState(false);
   const [actionStaffId, setActionStaffId] = useState(null);
-  const [loading, setLoading] = useState(false);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
   const [lastUpdated, setLastUpdated] = useState(null);
 
   const loadTeam = async (showLoader = false) => {
@@ -61,20 +58,6 @@ export default function CallingSystem() {
     return () => window.clearInterval(interval);
   }, []);
 
-  const addStaff = async (event) => {
-    event.preventDefault();
-    if (!name.trim() || !email.trim()) return setError("Staff name and email are required.");
-    setLoading(true); setError(""); setNotice("");
-    try {
-      const { data } = await api.post("/api/lead-distributor/staff", { name: name.trim(), email: email.trim().toLowerCase() });
-      setName(""); setEmail("");
-      setNotice(data.name + " was added to your team.");
-      await loadTeam(true);
-    } catch (err) {
-      setError(err.response?.data?.detail || "Unable to add staff member.");
-    } finally { setLoading(false); }
-  };
-
   const runAction = async (member, action) => {
     const id = member.staff_id;
     setActionStaffId(id); setError(""); setNotice("");
@@ -110,7 +93,7 @@ export default function CallingSystem() {
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16, flexWrap: "wrap" }}>
         <div><h2 style={{ marginTop: 0, marginBottom: 6 }}>Calling Queue</h2><p style={{ color: "#667085", marginTop: 0 }}>Every staff member has an independent persistent calling session.</p></div>
-        <button onClick={() => loadTeam(true)} disabled={staffLoading || loading || actionStaffId !== null} style={{ padding: "9px 14px", border: "1px solid #d0d5dd", borderRadius: 8, background: "#fff" }}>{staffLoading ? "Refreshing..." : "Refresh Team"}</button>
+        <button onClick={() => loadTeam(true)} disabled={staffLoading || actionStaffId !== null} style={{ padding: "9px 14px", border: "1px solid #d0d5dd", borderRadius: 8, background: "#fff" }}>{staffLoading ? "Refreshing..." : "Refresh Team"}</button>
       </div>
       {lastUpdated && <div style={{ color: "#98a2b3", fontSize: 12, marginBottom: 14 }}>Updated {lastUpdated.toLocaleTimeString()}</div>}
       {notice && <div style={{ padding: 12, background: "#ecfdf3", color: "#067647", borderRadius: 8, marginBottom: 16 }}>{notice}</div>}
@@ -119,11 +102,7 @@ export default function CallingSystem() {
       <section style={cardStyle}>
         <h3 style={{ marginTop: 0 }}>Team</h3>
         <p style={{ color: "#667085", marginTop: 0 }}>Each caller has their own queue, status and call count. There is no global "selected" caller.</p>
-        <form onSubmit={addStaff} style={{ display: "grid", gridTemplateColumns: "minmax(180px,1fr) minmax(220px,1fr) auto", gap: 10, marginBottom: 18 }}>
-          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Staff full name" autoComplete="name" required style={inputStyle} />
-          <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" placeholder="Staff email" autoComplete="email" required style={inputStyle} />
-          <button type="submit" disabled={loading || actionStaffId !== null} style={{ padding: "11px 16px", border: 0, borderRadius: 8, background: "#111827", color: "#fff", fontWeight: 700 }}>{loading ? "Saving..." : "Add staff"}</button>
-        </form>
+        <p style={{ color: "#98a2b3", fontSize: 13, marginTop: 0 }}>Add or manage staff accounts from Lead Distributor so every staff login has the correct password lifecycle.</p>
 
         {staffLoading && staff.length === 0 ? <p style={{ color: "#667085" }}>Loading staff...</p> : staff.length === 0 ? <p style={{ color: "#667085", marginBottom: 0 }}>No active staff members yet.</p> : (
           <div style={{ display: "grid", gap: 10 }}>
@@ -143,12 +122,12 @@ export default function CallingSystem() {
                   </div>
                   <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginTop: 14 }}>
                     <label style={{ color: "#475467", fontSize: 13 }}>Buffer</label>
-                    <select value={bufferSeconds[member.staff_id] || member.buffer_seconds || 7} onChange={(e) => setBufferSeconds((current) => ({ ...current, [member.staff_id]: Number(e.target.value) }))} disabled={busy || loading} style={{ padding: 8, border: "1px solid #d0d5dd", borderRadius: 7 }}>
+                    <select value={bufferSeconds[member.staff_id] || member.buffer_seconds || 7} onChange={(e) => setBufferSeconds((current) => ({ ...current, [member.staff_id]: Number(e.target.value) }))} disabled={busy} style={{ padding: 8, border: "1px solid #d0d5dd", borderRadius: 7 }}>
                       <option value={5}>5 sec</option><option value={7}>7 sec</option><option value={10}>10 sec</option>
                     </select>
                     {member.status === "running" ? <button onClick={() => runAction(member, "pause")} disabled={busy} style={{ padding: "8px 12px", border: 0, borderRadius: 7, background: "#d97706", color: "#fff" }}>{busy ? "Working..." : "Pause"}</button> : member.status === "paused" ? <button onClick={() => runAction(member, "resume")} disabled={busy} style={{ padding: "8px 12px", border: 0, borderRadius: 7, background: "#2563eb", color: "#fff" }}>{busy ? "Working..." : "Resume"}</button> : <button onClick={() => runAction(member, "start")} disabled={busy} style={{ padding: "8px 12px", border: 0, borderRadius: 7, background: "#16a34a", color: "#fff" }}>{busy ? "Working..." : "Start Calling"}</button>}
                     <button onClick={() => runAction(member, "stop")} disabled={busy || member.status === "stopped"} style={{ padding: "8px 12px", border: 0, borderRadius: 7, background: "#dc2626", color: "#fff" }}>Stop</button>
-                    <button onClick={() => removeStaff(member)} disabled={busy || loading} style={{ padding: "8px 12px", border: "1px solid #d0d5dd", borderRadius: 7, background: "#fff", color: "#475467" }}>Remove</button>
+                    <button onClick={() => removeStaff(member)} disabled={busy} style={{ padding: "8px 12px", border: "1px solid #d0d5dd", borderRadius: 7, background: "#fff", color: "#475467" }}>Remove</button>
                   </div>
                   <div style={{ marginTop: 12, color: "#667085", fontSize: 13 }}><strong style={{ color: "#344054" }}>Next lead:</strong> {nextLead ? (nextLead.name || "Unnamed lead") + " · " + nextLead.phone : "No uncalled lead currently available."}</div>
                 </div>

@@ -82,6 +82,12 @@ export default function Login() {
 
           {error && <div style={{ background: "#fef3f2", color: "#b42318", padding: 12, borderRadius: 8, marginBottom: 16 }}>{error}</div>}
 
+          {role === "staff" && (
+            <div style={{ marginBottom: 16, padding: 10, background: "#f9fafb", color: "#667085", borderRadius: 8, fontSize: 13 }}>
+              Forgot your password? Contact your broker/admin. They can reset it and give you a temporary password.
+            </div>
+          )}
+
           <button
             type="submit"
             disabled={loading}

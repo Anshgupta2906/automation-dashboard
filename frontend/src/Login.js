@@ -16,6 +16,36 @@ export default function Login() {
     setSuccess("");
   };
 
+  const getApiErrorMessage = (err, fallback) => {
+    const detail = err.response?.data?.detail;
+
+    if (Array.isArray(detail)) {
+      const emailError = detail.find(
+        (item) => Array.isArray(item?.loc) && item.loc.includes("email")
+      );
+
+      if (emailError) {
+        return "Please enter a valid email address.";
+      }
+
+      const passwordError = detail.find(
+        (item) => Array.isArray(item?.loc) && item.loc.includes("password")
+      );
+
+      if (passwordError) {
+        return "Password must be between 8 and 128 characters.";
+      }
+
+      return "Please check the information you entered.";
+    }
+
+    if (typeof detail === "string") {
+      return detail;
+    }
+
+    return fallback;
+  };
+
   const switchRole = (nextRole) => {
     setRole(nextRole);
     setMode("login");
@@ -44,7 +74,7 @@ export default function Login() {
       localStorage.setItem("user", JSON.stringify(data.user));
       window.location.href = data.user.role === "staff" ? "/staff" : "/dashboard";
     } catch (err) {
-      setError(err.response?.data?.detail || "Unable to sign in. Check your credentials.");
+      setError(getApiErrorMessage(err, "Unable to sign in. Check your credentials."));
     } finally {
       setLoading(false);
     }
@@ -69,14 +99,13 @@ export default function Login() {
         has_lead_distributor: false,
       });
 
-      // Sign the new broker in immediately after account creation.
       const { data } = await api.post("/api/auth/login", { email, password });
 
       localStorage.setItem("token", data.access_token);
       localStorage.setItem("user", JSON.stringify(data.user));
       window.location.href = "/dashboard";
     } catch (err) {
-      setError(err.response?.data?.detail || "Unable to create your account.");
+      setError(getApiErrorMessage(err, "Unable to create your account."));
     } finally {
       setLoading(false);
     }
@@ -104,18 +133,10 @@ export default function Login() {
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 22, padding: 4, background: "#f2f4f7", borderRadius: 10 }}>
-          <button
-            type="button"
-            onClick={() => switchRole("broker")}
-            style={{ padding: 10, border: 0, borderRadius: 7, background: role === "broker" ? "#fff" : "transparent", fontWeight: 700, cursor: "pointer" }}
-          >
+          <button type="button" onClick={() => switchRole("broker")} style={{ padding: 10, border: 0, borderRadius: 7, background: role === "broker" ? "#fff" : "transparent", fontWeight: 700, cursor: "pointer" }}>
             Broker
           </button>
-          <button
-            type="button"
-            onClick={() => switchRole("staff")}
-            style={{ padding: 10, border: 0, borderRadius: 7, background: role === "staff" ? "#fff" : "transparent", fontWeight: 700, cursor: "pointer" }}
-          >
+          <button type="button" onClick={() => switchRole("staff")} style={{ padding: 10, border: 0, borderRadius: 7, background: role === "staff" ? "#fff" : "transparent", fontWeight: 700, cursor: "pointer" }}>
             Staff
           </button>
         </div>
@@ -134,9 +155,7 @@ export default function Login() {
           </label>
 
           <label style={{ display: "block", marginBottom: 16 }}>
-            <span style={{ display: "block", marginBottom: 6, fontWeight: 600 }}>
-              {isSignup ? "Password" : "Password"}
-            </span>
+            <span style={{ display: "block", marginBottom: 6, fontWeight: 600 }}>Password</span>
             <input
               type="password"
               required
@@ -186,11 +205,7 @@ export default function Login() {
             </div>
           )}
 
-          <button
-            type="submit"
-            disabled={loading}
-            style={{ width: "100%", padding: 13, border: 0, borderRadius: 8, background: "#2563eb", color: "#fff", fontWeight: 700, cursor: loading ? "wait" : "pointer" }}
-          >
+          <button type="submit" disabled={loading} style={{ width: "100%", padding: 13, border: 0, borderRadius: 8, background: "#2563eb", color: "#fff", fontWeight: 700, cursor: loading ? "wait" : "pointer" }}>
             {loading
               ? (isSignup ? "Creating account..." : "Signing in...")
               : (isSignup ? "Create account" : role === "staff" ? "Staff sign in" : "Broker sign in")}

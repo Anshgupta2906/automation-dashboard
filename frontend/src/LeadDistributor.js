@@ -146,9 +146,8 @@ export default function LeadDistributor() {
     setResetPasswordResult(null);
     try {
       const response = await api.post(
-        "/api/staff-accounts/${staff.id}/reset-password`,
-        {},
-        { headers }
+        "/api/staff-accounts/" + staff.id + "/reset-password",
+        {}
       );
       setResetPasswordResult({
         name: staff.name,
@@ -183,12 +182,11 @@ export default function LeadDistributor() {
     setLoading(true);
     try {
       await api.put(
-        `${API_URL}/api/lead-distributor/staff/${staffId}`,
+        `/api/lead-distributor/staff/${staffId}`,
         {
           name: editName.trim(),
           email: editEmail.trim(),
-        },
-        { headers }
+        }
       );
 
       cancelEditing();
@@ -210,8 +208,7 @@ export default function LeadDistributor() {
     setLoading(true);
     try {
       await api.delete(
-        `${API_URL}/api/lead-distributor/staff/${staff.id}`,
-        { headers }
+        `/api/lead-distributor/staff/${staff.id}`
       );
 
       if (editingStaffId === staff.id) cancelEditing();
@@ -238,16 +235,15 @@ export default function LeadDistributor() {
 
     setLoading(true);
     try {
-      await axios.post(
-        `${API_URL}/api/lead-distributor/configure`,
+      await api.post(
+        `/api/lead-distributor/configure`,
         {
           contacts_per_person: contactsPerDay,
           selected_days: selectedDays,
           send_time: sendTime,
           enabled: true,
           exclusion_window: 0,
-        },
-        { headers }
+        }
       );
 
       showSuccess(
@@ -267,10 +263,9 @@ export default function LeadDistributor() {
 
     setLoading(true);
     try {
-      const response = await axios.post(
-        `${API_URL}/api/lead-distributor/distribute-now`,
-        {},
-        { headers }
+      const response = await api.post(
+        `/api/lead-distributor/distribute-now`,
+        {}
       );
 
       const staffSummary = (response.data.staff_results || [])
@@ -291,10 +286,9 @@ export default function LeadDistributor() {
   const handleSendEmails = async () => {
     setLoading(true);
     try {
-      const response = await axios.post(
-        `${API_URL}/api/lead-distributor/send-emails`,
-        {},
-        { headers }
+      const response = await api.post(
+        `/api/lead-distributor/send-emails`,
+        {}
       );
 
       showSuccess(response.data.message);

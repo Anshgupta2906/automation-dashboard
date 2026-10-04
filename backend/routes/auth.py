@@ -248,35 +248,12 @@ def get_subscription(
     current_user: User = Depends(get_current_user),
 ):
     subscription = _get_or_create_subscription(db, current_user)
-    return {"plan": subscription.plan, "status": subscription.status, "paused_at": subscription.paused_at}
-
-
-@router.post("/subscription/pause")
-def pause_subscription(
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    subscription = _get_or_create_subscription(db, current_user)
-    if subscription.status == "paused":
-        return {"status": "paused", "message": "Your plan is already paused."}
-    subscription.status = "paused"
-    subscription.paused_at = datetime.utcnow()
-    db.commit()
-    return {"status": "paused", "message": "Your plan has been paused. Staff access is disabled until you resume it."}
-
-
-@router.post("/subscription/resume")
-def resume_subscription(
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    subscription = _get_or_create_subscription(db, current_user)
-    if subscription.status == "active":
-        return {"status": "active", "message": "Your plan is already active."}
-    subscription.status = "active"
-    subscription.paused_at = None
-    db.commit()
-    return {"status": "active", "message": "Your plan has been resumed."}
+    return {
+        "plan": subscription.plan,
+        "status": subscription.status,
+        "paused_at": subscription.paused_at,
+        "expires_at": subscription.expires_at,
+    }
 
 
 @router.get("/me", response_model=UserResponse)

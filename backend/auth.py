@@ -66,15 +66,6 @@ def get_current_admin(
     return payload
 
 
-def get_current_admin(
-    credentials: HTTPAuthorizationCredentials = Depends(security),
-) -> dict:
-    payload = _decode_token(credentials)
-    if payload.get("role") != "admin":
-        raise HTTPException(status_code=403, detail="Admin account required")
-    return payload
-
-
 def get_current_staff(
     credentials: HTTPAuthorizationCredentials = Depends(security),
     db: Session = Depends(get_db),

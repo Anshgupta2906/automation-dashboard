@@ -256,7 +256,7 @@ def get_subscription(
     }
 
 
-@router.get("/me", response_model=UserResponse)
+@router.get("/me")
 def me(current_user=Depends(get_current_user), db: Session = Depends(get_db)):
     subscription = _get_or_create_subscription(db, current_user)
     return {

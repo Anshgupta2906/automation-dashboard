@@ -97,12 +97,39 @@ def get_next_contact(db: Session, staff_id: int):
 
 
 def claim_next_call(db: Session, staff_id: int) -> CallLog | None:
-    """Atomically reserve the next unattempted lead for a calling session."""
+    """Reserve one lead safely so concurrent callers cannot claim the same assignment."""
     session = get_or_create_session(db, staff_id)
     if session.status != "running":
         return None
 
-    contact = get_next_contact(db, staff_id)
+    # Never claim a second lead while this staff member already has an active call.
+    if session.current_call_id:
+        current = db.query(CallLog).filter(
+            CallLog.id == session.current_call_id,
+            CallLog.staff_id == staff_id,
+        ).first()
+        if current and current.call_status not in TERMINAL_STATUSES:
+            return None
+        session.current_call_id = None
+
+    today = date.today()
+    called_subquery = _called_contact_subquery(db, staff_id).filter(CallLog.called_at >= today)
+    history = (
+        db.query(DistributionHistory)
+        .join(DistributionContact, DistributionHistory.contact_id == DistributionContact.id)
+        .filter(
+            DistributionHistory.staff_id == staff_id,
+            DistributionHistory.assigned_date == today,
+            ~DistributionHistory.contact_id.in_(called_subquery),
+        )
+        .order_by(DistributionHistory.id)
+        .with_for_update(skip_locked=True)
+        .first()
+    )
+    if not history:
+        return None
+
+    contact = db.query(DistributionContact).filter(DistributionContact.id == history.contact_id).first()
     if not contact:
         return None
 

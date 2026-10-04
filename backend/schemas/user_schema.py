@@ -22,6 +22,8 @@ class UserResponse(BaseModel):
     email: str
     has_message_shooter: bool
     has_lead_distributor: bool
+    plan: str = "none"
+    subscription_status: str = "active"
 
     class Config:
         from_attributes = True

@@ -6,6 +6,7 @@ from jose import jwt
 from sqlalchemy.orm import Session
 
 from backend.models.user import User
+from backend.models.subscription import Subscription
 
 ph = PasswordHasher()
 SECRET_KEY = os.getenv("SECRET_KEY")
@@ -53,6 +54,14 @@ def register_user(
         has_lead_distributor=has_lead_distributor,
     )
     db.add(user)
+    db.flush()
+
+    plan = "all_in_one" if has_message_shooter and has_lead_distributor else (
+        "message_shooter" if has_message_shooter else (
+            "lead_distributor" if has_lead_distributor else "none"
+        )
+    )
+    db.add(Subscription(user_id=user.id, plan=plan, status="active"))
     db.commit()
     db.refresh(user)
     return user

@@ -88,8 +88,8 @@ export default function Login() {
       await api.post("/api/auth/signup", {
         email,
         password,
-        has_message_shooter: true,
-        has_lead_distributor: true,
+        has_message_shooter: false,
+        has_lead_distributor: false,
       });
 
       const { data } = await api.post("/api/auth/login", { email, password });

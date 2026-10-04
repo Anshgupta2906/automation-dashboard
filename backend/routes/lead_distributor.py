@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from backend.auth import get_current_user
+from backend.auth import get_current_user, require_subscription_feature
 from backend.database import get_db
 from backend.models.distribution import (
     DistributionConfig as DistributionConfigModel,
@@ -32,9 +32,8 @@ MAX_UPLOAD_BYTES = 200 * 1024 * 1024
 DEFAULT_CONTACTS_PER_PERSON = 300
 
 
-def require_feature(current_user: User) -> None:
-    if not current_user.has_lead_distributor:
-        raise HTTPException(status_code=403, detail="Lead Distributor is not enabled for this account")
+def require_feature(db: Session, current_user: User) -> None:
+    require_subscription_feature(db, current_user, "lead_distributor")
 
 
 def normalize_phone(value) -> str | None:
@@ -207,7 +206,7 @@ async def upload_contacts(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    require_feature(current_user)
+    require_feature(db, current_user)
 
     contents = await file.read()
     if len(contents) > MAX_UPLOAD_BYTES:

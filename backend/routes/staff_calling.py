@@ -51,6 +51,7 @@ def me(current_staff: StaffMember = Depends(get_current_staff)):
         "name": current_staff.name,
         "email": current_staff.email,
         "broker_id": current_staff.broker_id,
+        "must_change_password": current_staff.must_change_password,
     }
 
 

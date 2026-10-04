@@ -22,6 +22,13 @@ export default function StaffDashboard() {
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
 
+  useEffect(() => {
+    const saved = localStorage.getItem("activeCall");
+    if (saved) {
+      try { setActiveCall(JSON.parse(saved)); } catch { localStorage.removeItem("activeCall"); }
+    }
+  }, []);
+
   const refresh = async () => {
     try {
       const [me, statusRes, nextRes, statsRes, logsRes] = await Promise.all([
@@ -87,6 +94,7 @@ export default function StaffDashboard() {
       await api.post("/api/staff-calling/stop");
       setNotice("Calling queue stopped.");
       setActiveCall(null);
+      localStorage.removeItem("activeCall");
       await refresh();
     } catch (err) {
       setError(err.response?.data?.detail || "Unable to stop calling.");
@@ -106,12 +114,14 @@ export default function StaffDashboard() {
         await refresh();
         return;
       }
-      setActiveCall({
+      const call = {
         callId: data.call_id,
         contactId: data.contact.id,
         name: data.contact.name,
         phone: data.contact.phone,
-      });
+      };
+      setActiveCall(call);
+      localStorage.setItem("activeCall", JSON.stringify(call));
       window.location.href = "tel:" + data.contact.phone;
     } catch (err) {
       setError(err.response?.data?.detail || "Unable to start the next call.");
@@ -131,6 +141,7 @@ export default function StaffDashboard() {
         duration: 0,
       });
       setActiveCall(null);
+      localStorage.removeItem("activeCall");
       setNotice("Call saved. The next lead is ready.");
       await refresh();
     } catch (err) {

@@ -361,7 +361,7 @@ def configure_distribution(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    require_feature(current_user)
+    require_feature(db, current_user)
     if not 1 <= config.contacts_per_person <= 5000:
         raise HTTPException(status_code=400, detail="contacts_per_person must be between 1 and 5000")
     if not config.selected_days:
@@ -402,7 +402,7 @@ def distribute_leads_now(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    require_feature(current_user)
+    require_feature(db, current_user)
 
     config = _get_config(db, current_user.id)
     contacts_per_person = config.contacts_per_person if config else DEFAULT_CONTACTS_PER_PERSON
@@ -424,7 +424,7 @@ def get_distribution_history(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    require_feature(current_user)
+    require_feature(db, current_user)
     limit = min(max(limit, 1), 500)
     offset = max(offset, 0)
 
@@ -444,7 +444,7 @@ def get_stats(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    require_feature(current_user)
+    require_feature(db, current_user)
     staff_count = db.query(StaffMember).filter(
         StaffMember.broker_id == current_user.id,
         StaffMember.is_active.is_(True),
@@ -478,7 +478,7 @@ def send_emails_to_staff(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    require_feature(current_user)
+    require_feature(db, current_user)
     staff_list = db.query(StaffMember).filter(
         StaffMember.broker_id == current_user.id,
         StaffMember.is_active.is_(True),

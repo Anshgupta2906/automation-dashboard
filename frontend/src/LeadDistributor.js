@@ -8,6 +8,7 @@ export default function LeadDistributor() {
   const [staffName, setStaffName] = useState('');
   const [staffEmail, setStaffEmail] = useState('');
   const [staffPassword, setStaffPassword] = useState('');
+  const [resetPasswordResult, setResetPasswordResult] = useState(null);
   const [staffMembers, setStaffMembers] = useState([]);
   const [editingStaffId, setEditingStaffId] = useState(null);
   const [editName, setEditName] = useState('');
@@ -149,6 +150,32 @@ export default function LeadDistributor() {
       setLoading(false);
     }
   };
+  const handleResetPassword = async (staff) => {
+    const confirmed = window.confirm(
+      `Reset the password for ${staff.name}? Their current password will stop working immediately.`
+    );
+    if (!confirmed) return;
+
+    setLoading(true);
+    setResetPasswordResult(null);
+    try {
+      const response = await axios.post(
+        `${API_URL}/api/staff-accounts/${staff.id}/reset-password`,
+        {},
+        { headers }
+      );
+      setResetPasswordResult({
+        name: staff.name,
+        password: response.data.temporary_password,
+      });
+      showSuccess(`Temporary password generated for ${staff.name}.`);
+    } catch (err) {
+      showError('Error resetting password: ' + (err.response?.data?.detail || err.message));
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const startEditing = (staff) => {
     setEditingStaffId(staff.id);
     setEditName(staff.name);
@@ -340,6 +367,43 @@ export default function LeadDistributor() {
         </div>
       )}
 
+        {resetPasswordResult && (
+          <div style={{
+            marginBottom: '16px',
+            padding: '16px',
+            background: '#eff6ff',
+            border: '1px solid #bfdbfe',
+            borderRadius: '8px',
+          }}>
+            <div style={{ fontWeight: 700, marginBottom: '6px' }}>
+              Temporary password for {resetPasswordResult.name}
+            </div>
+            <div style={{ fontSize: '13px', color: '#475467', marginBottom: '10px' }}>
+              Share this once with the staff member. They will be forced to choose a new password after logging in.
+            </div>
+            <div style={{
+              display: 'inline-block',
+              padding: '10px 12px',
+              background: '#fff',
+              border: '1px dashed #93c5fd',
+              borderRadius: '7px',
+              fontFamily: 'monospace',
+              fontSize: '16px',
+              fontWeight: 700,
+            }}>
+              {resetPasswordResult.password}
+            </div>
+            <div style={{ marginTop: '10px' }}>
+              <button
+                onClick={() => setResetPasswordResult(null)}
+                style={buttonStyle('#6b7280')}
+              >
+                Hide Password
+              </button>
+            </div>
+          </div>
+        )}
+
       {error && (
         <div style={{
           marginBottom: '16px',
@@ -403,7 +467,7 @@ export default function LeadDistributor() {
           />
           <input
             type="password"
-            placeholder="Initial password (8+ chars)"
+            placeholder="Temporary password (8+ chars)"
             value={staffPassword}
             onChange={(e) => setStaffPassword(e.target.value)}
             minLength={8}
@@ -495,6 +559,13 @@ export default function LeadDistributor() {
                         style={buttonStyle('#f59e0b', loading)}
                       >
                         Edit
+                      </button>
+                      <button
+                        onClick={() => handleResetPassword(staff)}
+                        disabled={loading}
+                        style={buttonStyle('#7c3aed', loading)}
+                      >
+                        Reset Password
                       </button>
                       <button
                         onClick={() => handleDeleteStaff(staff)}

@@ -23,6 +23,7 @@ class StaffMember(Base):
     name = Column(String)
     email = Column(String)
     password_hash = Column(String, nullable=True)
+    must_change_password = Column(Boolean, default=True, nullable=False)
     is_active = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 

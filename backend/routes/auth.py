@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from backend.auth import get_current_staff, get_current_user
@@ -6,7 +7,7 @@ from backend.database import get_db
 from backend.models.distribution import StaffMember
 from backend.models.user import User
 from backend.schemas.distribution_schema import StaffPasswordChange
-from backend.schemas.user_schema import UserLogin, UserRegister, UserResponse
+from backend.schemas.user_schema import AccountDeleteRequest, UserLogin, UserRegister, UserResponse
 from backend.services.auth_service import create_access_token, hash_password, login_user, register_user, verify_password
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
@@ -97,6 +98,114 @@ def change_staff_password(
     db.commit()
 
     return {"status": "ok", "message": "Password changed successfully. You can continue using the dashboard."}
+
+
+@router.delete("/account")
+def delete_account(
+    request: AccountDeleteRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if not verify_password(request.password, current_user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Password is incorrect",
+        )
+
+    try:
+        # Delete dependent broker data first so PostgreSQL foreign-key constraints
+        # do not leave orphaned records behind.
+        db.execute(
+            text("""
+                DELETE FROM call_logs
+                WHERE staff_id IN (
+                    SELECT id FROM staff_members WHERE broker_id = :broker_id
+                )
+            """),
+            {"broker_id": current_user.id},
+        )
+        db.execute(
+            text("""
+                DELETE FROM calling_sessions
+                WHERE staff_id IN (
+                    SELECT id FROM staff_members WHERE broker_id = :broker_id
+                )
+            """),
+            {"broker_id": current_user.id},
+        )
+        db.execute(
+            text("""
+                DELETE FROM distribution_history
+                WHERE staff_id IN (
+                    SELECT id FROM staff_members WHERE broker_id = :broker_id
+                )
+            """),
+            {"broker_id": current_user.id},
+        )
+        db.execute(
+            text("""
+                DELETE FROM staff_members
+                WHERE broker_id = :broker_id
+            """),
+            {"broker_id": current_user.id},
+        )
+        db.execute(
+            text("""
+                DELETE FROM distribution_configs
+                WHERE broker_id = :broker_id
+            """),
+            {"broker_id": current_user.id},
+        )
+        db.execute(
+            text("""
+                DELETE FROM distribution_contacts
+                WHERE broker_id = :broker_id
+            """),
+            {"broker_id": current_user.id},
+        )
+        db.execute(
+            text("""
+                DELETE FROM message_logs
+                WHERE contact_id IN (
+                    SELECT id FROM message_contacts WHERE broker_id = :broker_id
+                )
+                OR campaign_id IN (
+                    SELECT id FROM message_campaigns WHERE broker_id = :broker_id
+                )
+            """),
+            {"broker_id": current_user.id},
+        )
+        db.execute(
+            text("""
+                DELETE FROM message_contacts
+                WHERE broker_id = :broker_id
+            """),
+            {"broker_id": current_user.id},
+        )
+        db.execute(
+            text("""
+                DELETE FROM message_campaigns
+                WHERE broker_id = :broker_id
+            """),
+            {"broker_id": current_user.id},
+        )
+        db.execute(
+            text("""
+                DELETE FROM users
+                WHERE id = :broker_id
+            """),
+            {"broker_id": current_user.id},
+        )
+
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Account deletion failed. No changes were saved.",
+        )
+
+    return {"status": "deleted", "message": "Account and all associated data have been permanently deleted."}
 
 
 @router.get("/me", response_model=UserResponse)

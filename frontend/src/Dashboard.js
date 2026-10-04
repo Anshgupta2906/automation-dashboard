@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import MessageShooter from './MessageShooter';
 import LeadDistributor from './LeadDistributor';
 import CallingSystem from './CallingSystem';
@@ -10,7 +10,52 @@ export default function Dashboard() {
   const [deletePassword, setDeletePassword] = useState('');
   const [deleteError, setDeleteError] = useState('');
   const [deleting, setDeleting] = useState(false);
+  const [subscription, setSubscription] = useState(null);
+  const [planActionLoading, setPlanActionLoading] = useState(false);
+  const [planError, setPlanError] = useState('');
   const user = JSON.parse(localStorage.getItem('user'));
+
+  useEffect(() => {
+    loadSubscription();
+  }, []);
+
+  const loadSubscription = async () => {
+    try {
+      const response = await api.get('/api/auth/subscription');
+      setSubscription(response.data);
+    } catch (err) {
+      setPlanError(err.response?.data?.detail || 'Unable to load plan status.');
+    }
+  };
+
+  const handlePlanToggle = async () => {
+    setPlanError('');
+    const isPaused = subscription?.status === 'paused';
+    const confirmed = window.confirm(
+      isPaused
+        ? 'Resume your plan and restore staff access?'
+        : 'Pause your plan? Staff access will be disabled until you resume it.'
+    );
+
+    if (!confirmed) return;
+
+    setPlanActionLoading(true);
+    try {
+      const endpoint = isPaused
+        ? '/api/auth/subscription/resume'
+        : '/api/auth/subscription/pause';
+
+      const response = await api.post(endpoint);
+      setSubscription((current) => ({
+        ...(current || {}),
+        status: response.data.status,
+      }));
+    } catch (err) {
+      setPlanError(err.response?.data?.detail || 'Unable to update your plan.');
+    } finally {
+      setPlanActionLoading(false);
+    }
+  };
 
   const handleLogout = () => {
     localStorage.removeItem('token');
@@ -109,6 +154,59 @@ export default function Dashboard() {
         {activeTab === 'message-shooter' && <MessageShooter />}
         {activeTab === 'lead-distributor' && <LeadDistributor />}
         {activeTab === 'calling' && <CallingSystem />}
+      </div>
+
+      <div style={{
+        marginTop: '30px',
+        padding: '20px',
+        border: '1px solid #d1d5db',
+        borderRadius: '8px',
+        background: '#f9fafb',
+      }}>
+        <h3 style={{ marginTop: 0 }}>Plan & Subscription</h3>
+        <p style={{ margin: '6px 0', color: '#4b5563' }}>
+          Plan: <strong>{subscription?.plan === 'all_in_one' ? 'All-in-One' : subscription?.plan || 'Loading...'}</strong>
+        </p>
+        <p style={{ margin: '6px 0 14px', color: '#4b5563' }}>
+          Status:{' '}
+          <strong style={{ color: subscription?.status === 'paused' ? '#b45309' : '#15803d' }}>
+            {subscription?.status === 'paused' ? 'Paused' : subscription?.status === 'active' ? 'Active' : 'Loading...'}
+          </strong>
+        </p>
+
+        {planError && (
+          <div style={{
+            marginBottom: '10px',
+            padding: '10px',
+            background: '#fef2f2',
+            color: '#b91c1c',
+            borderRadius: '7px',
+          }}>
+            {planError}
+          </div>
+        )}
+
+        {subscription && (
+          <button
+            onClick={handlePlanToggle}
+            disabled={planActionLoading}
+            style={{
+              padding: '10px 16px',
+              backgroundColor: subscription.status === 'paused' ? '#16a34a' : '#d97706',
+              color: '#fff',
+              border: 'none',
+              borderRadius: '7px',
+              cursor: planActionLoading ? 'wait' : 'pointer',
+              fontWeight: 600,
+            }}
+          >
+            {planActionLoading
+              ? 'Updating...'
+              : subscription.status === 'paused'
+                ? 'Resume Plan'
+                : 'Pause Plan'}
+          </button>
+        )}
       </div>
 
       <div style={{

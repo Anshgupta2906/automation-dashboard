@@ -1,16 +1,37 @@
 from fastapi import APIRouter, Depends, HTTPException, status
+from datetime import datetime
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from backend.auth import get_current_staff, get_current_user
 from backend.database import get_db
 from backend.models.distribution import StaffMember
+from backend.models.subscription import Subscription
 from backend.models.user import User
 from backend.schemas.distribution_schema import StaffPasswordChange
 from backend.schemas.user_schema import AccountDeleteRequest, UserLogin, UserRegister, UserResponse
 from backend.services.auth_service import create_access_token, hash_password, login_user, register_user, verify_password
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
+
+
+def _get_or_create_subscription(db: Session, user: User) -> Subscription:
+    subscription = db.query(Subscription).filter(Subscription.user_id == user.id).first()
+    if subscription:
+        return subscription
+    if user.has_message_shooter and user.has_lead_distributor:
+        plan = "all_in_one"
+    elif user.has_message_shooter:
+        plan = "message_shooter"
+    elif user.has_lead_distributor:
+        plan = "lead_distributor"
+    else:
+        plan = "none"
+    subscription = Subscription(user_id=user.id, plan=plan, status="active")
+    db.add(subscription)
+    db.commit()
+    db.refresh(subscription)
+    return subscription
 
 
 @router.post("/signup", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
@@ -36,6 +57,8 @@ def login(user: UserLogin, db: Session = Depends(get_db)):
             detail="Invalid email or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
+
+    subscription = _get_or_create_subscription(db, db_user)
 
     return {
         "access_token": create_access_token({"sub": str(db_user.id), "role": "broker"}),
@@ -65,6 +88,10 @@ def staff_login(user: UserLogin, db: Session = Depends(get_db)):
             detail="Invalid staff email or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
+
+    subscription = db.query(Subscription).filter(Subscription.user_id == staff.broker_id).first()
+    if subscription and subscription.status == "paused":
+        raise HTTPException(status_code=403, detail="The broker plan is currently paused. Staff access is unavailable.")
 
     return {
         "access_token": create_access_token({"sub": str(staff.id), "role": "staff"}),
@@ -191,6 +218,13 @@ def delete_account(
         )
         db.execute(
             text("""
+                DELETE FROM subscriptions
+                WHERE user_id = :broker_id
+            """),
+            {"broker_id": current_user.id},
+        )
+        db.execute(
+            text("""
                 DELETE FROM users
                 WHERE id = :broker_id
             """),
@@ -208,6 +242,51 @@ def delete_account(
     return {"status": "deleted", "message": "Account and all associated data have been permanently deleted."}
 
 
+@router.get("/subscription")
+def get_subscription(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    subscription = _get_or_create_subscription(db, current_user)
+    return {"plan": subscription.plan, "status": subscription.status, "paused_at": subscription.paused_at}
+
+
+@router.post("/subscription/pause")
+def pause_subscription(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    subscription = _get_or_create_subscription(db, current_user)
+    if subscription.status == "paused":
+        return {"status": "paused", "message": "Your plan is already paused."}
+    subscription.status = "paused"
+    subscription.paused_at = datetime.utcnow()
+    db.commit()
+    return {"status": "paused", "message": "Your plan has been paused. Staff access is disabled until you resume it."}
+
+
+@router.post("/subscription/resume")
+def resume_subscription(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    subscription = _get_or_create_subscription(db, current_user)
+    if subscription.status == "active":
+        return {"status": "active", "message": "Your plan is already active."}
+    subscription.status = "active"
+    subscription.paused_at = None
+    db.commit()
+    return {"status": "active", "message": "Your plan has been resumed."}
+
+
 @router.get("/me", response_model=UserResponse)
-def me(current_user=Depends(get_current_user)):
-    return current_user
+def me(current_user=Depends(get_current_user), db: Session = Depends(get_db)):
+    subscription = _get_or_create_subscription(db, current_user)
+    return {
+        "id": current_user.id,
+        "email": current_user.email,
+        "has_message_shooter": current_user.has_message_shooter,
+        "has_lead_distributor": current_user.has_lead_distributor,
+        "plan": subscription.plan,
+        "subscription_status": subscription.status,
+    }

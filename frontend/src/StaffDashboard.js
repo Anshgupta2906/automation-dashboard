@@ -10,7 +10,8 @@ const card = {
 };
 
 export default function StaffDashboard() {
-  const user = JSON.parse(localStorage.getItem("user") || "{}");
+  const user = JSON.parse(localStorage.getItem("staff_user") || "{}");
+  const activeCallKey = `activeCall_${user.id || "unknown"}`;
   const [staff, setStaff] = useState(user);
   const [status, setStatus] = useState("stopped");
   const [bufferSeconds, setBufferSeconds] = useState(7);
@@ -27,9 +28,9 @@ export default function StaffDashboard() {
   const [mustChangePassword, setMustChangePassword] = useState(Boolean(user.must_change_password));
 
   useEffect(() => {
-    const saved = localStorage.getItem("activeCall");
+    const saved = localStorage.getItem(activeCallKey);
     if (saved) {
-      try { setActiveCall(JSON.parse(saved)); } catch { localStorage.removeItem("activeCall"); }
+      try { setActiveCall(JSON.parse(saved)); } catch { localStorage.removeItem(activeCallKey); }
     }
   }, []);
 
@@ -61,6 +62,8 @@ export default function StaffDashboard() {
   }, []);
 
   const logout = () => {
+    localStorage.removeItem("staff_token");
+    localStorage.removeItem("staff_user");
     localStorage.removeItem("token");
     localStorage.removeItem("user");
     window.location.href = "/login";
@@ -165,7 +168,7 @@ export default function StaffDashboard() {
         phone: data.contact.phone,
       };
       setActiveCall(call);
-      localStorage.setItem("activeCall", JSON.stringify(call));
+      localStorage.setItem(activeCallKey, JSON.stringify(call));
       window.location.href = "tel:" + data.contact.phone;
     } catch (err) {
       setError(err.response?.data?.detail || "Unable to start the next call.");

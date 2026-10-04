@@ -1,7 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import axios from 'axios';
-
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+import api from './api';
 
 export default function LeadDistributor() {
   const [file, setFile] = useState(null);
@@ -25,14 +23,14 @@ export default function LeadDistributor() {
   const [success, setSuccess] = useState('');
   const [error, setError] = useState('');
   const [stats, setStats] = useState(null);
+  const [statsLoading, setStatsLoading] = useState(false);
+  const [statsError, setStatsError] = useState('');
+  const [statsUpdatedAt, setStatsUpdatedAt] = useState(null);
 
   const days = [
     'monday', 'tuesday', 'wednesday', 'thursday',
     'friday', 'saturday', 'sunday'
   ];
-
-  const token = localStorage.getItem('token');
-  const headers = { Authorization: `Bearer ${token}` };
 
   const showSuccess = (message) => {
     setSuccess(message);
@@ -48,10 +46,7 @@ export default function LeadDistributor() {
   const loadStaffMembers = async () => {
     setStaffLoading(true);
     try {
-      const response = await axios.get(
-        `${API_URL}/api/lead-distributor/staff`,
-        { headers }
-      );
+      const response = await api.get('/api/lead-distributor/staff');
       setStaffMembers(response.data || []);
     } catch (err) {
       showError('Unable to load staff members: ' + (err.response?.data?.detail || err.message));
@@ -61,14 +56,16 @@ export default function LeadDistributor() {
   };
 
   const loadStats = async () => {
+    setStatsLoading(true);
+    setStatsError('');
     try {
-      const response = await axios.get(
-        `${API_URL}/api/lead-distributor/stats`,
-        { headers }
-      );
+      const response = await api.get('/api/lead-distributor/stats');
       setStats(response.data);
+      setStatsUpdatedAt(new Date());
     } catch (err) {
-      // Stats should not block the rest of the dashboard.
+      setStatsError(err.response?.data?.detail || 'Unable to refresh statistics.');
+    } finally {
+      setStatsLoading(false);
     }
   };
 
@@ -96,16 +93,9 @@ export default function LeadDistributor() {
       const formData = new FormData();
       formData.append('file', uploadFile);
 
-      const response = await axios.post(
-        `${API_URL}/api/lead-distributor/upload`,
-        formData,
-        {
-          headers: {
-            'Content-Type': 'multipart/form-data',
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
+      const response = await api.post('/api/lead-distributor/upload', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
 
       showSuccess(
         `Uploaded ${response.data.contacts_added} contacts. ${response.data.duplicates_skipped} duplicates skipped.`
@@ -128,15 +118,11 @@ export default function LeadDistributor() {
 
     setLoading(true);
     try {
-      await axios.post(
-        `${API_URL}/api/staff-accounts`,
-        {
-          name: staffName.trim(),
-          email: staffEmail.trim(),
-          password: staffPassword,
-        },
-        { headers }
-      );
+      await api.post('/api/staff-accounts', {
+        name: staffName.trim(),
+        email: staffEmail.trim(),
+        password: staffPassword,
+      });
 
       setStaffName('');
       setStaffEmail('');
@@ -159,8 +145,8 @@ export default function LeadDistributor() {
     setLoading(true);
     setResetPasswordResult(null);
     try {
-      const response = await axios.post(
-        `${API_URL}/api/staff-accounts/${staff.id}/reset-password`,
+      const response = await api.post(
+        "/api/staff-accounts/${staff.id}/reset-password`,
         {},
         { headers }
       );
@@ -196,7 +182,7 @@ export default function LeadDistributor() {
 
     setLoading(true);
     try {
-      await axios.put(
+      await api.put(
         `${API_URL}/api/lead-distributor/staff/${staffId}`,
         {
           name: editName.trim(),
@@ -223,7 +209,7 @@ export default function LeadDistributor() {
 
     setLoading(true);
     try {
-      await axios.delete(
+      await api.delete(
         `${API_URL}/api/lead-distributor/staff/${staff.id}`,
         { headers }
       );
@@ -692,15 +678,26 @@ export default function LeadDistributor() {
           </div>
         </div>
 
+        {statsError && (
+          <div style={{ marginTop: '12px', padding: '10px', background: '#fef2f2', color: '#b91c1c', borderRadius: '7px' }}>
+            {statsError}
+          </div>
+        )}
+        {statsUpdatedAt && !statsError && (
+          <div style={{ marginTop: '8px', color: '#98a2b3', fontSize: '12px' }}>
+            Updated {statsUpdatedAt.toLocaleTimeString()}
+          </div>
+        )}
+
         <button
           onClick={loadStats}
-          disabled={loading}
+          disabled={loading || statsLoading}
           style={{
-            ...buttonStyle('#6b7280', loading),
+            ...buttonStyle('#6b7280', loading || statsLoading),
             marginTop: '14px',
           }}
         >
-          Refresh Statistics
+          {statsLoading ? 'Refreshing...' : 'Refresh Statistics'}
         </button>
       </div>
     </div>

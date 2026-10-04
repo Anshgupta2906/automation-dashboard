@@ -4,7 +4,6 @@ import api from "./api";
 const cardStyle = {
   padding: 20, border: "1px solid #eaecf0", borderRadius: 12, background: "#fff", marginBottom: 20,
 };
-const inputStyle = { width: "100%", boxSizing: "border-box", padding: 11, border: "1px solid #d0d5dd", borderRadius: 8 };
 const statusMeta = {
   running: { label: "Calling", background: "#ecfdf3", color: "#067647" },
   paused: { label: "Paused", background: "#fffaeb", color: "#b54708" },

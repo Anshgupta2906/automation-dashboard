@@ -58,9 +58,6 @@ def get_current_user(
         )
     return user
 
-
-CALLING_PLAN = "all_in_one"
-
 def require_subscription_feature(db: Session, user: User, feature: str) -> Subscription:
     """Enforce the admin-assigned subscription before a broker feature is used."""
     subscription = db.query(Subscription).filter(Subscription.user_id == user.id).first()

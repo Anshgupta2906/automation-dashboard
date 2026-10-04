@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 from typing import Optional
 from datetime import date
 
@@ -6,6 +6,7 @@ from datetime import date
 class StaffMemberCreate(BaseModel):
     name: str
     email: EmailStr
+    password: str = Field(min_length=8, max_length=128)
 
 
 class StaffMemberUpdate(BaseModel):

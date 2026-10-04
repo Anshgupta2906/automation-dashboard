@@ -19,6 +19,10 @@ def ensure_schema_compatibility() -> None:
         ALTER COLUMN sent_at DROP DEFAULT
         """,
         """
+        ALTER TABLE subscriptions
+        ADD COLUMN IF NOT EXISTS expires_at TIMESTAMP
+        """,
+        """
         ALTER TABLE staff_members
         ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE
         """,

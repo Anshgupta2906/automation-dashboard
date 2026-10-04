@@ -122,30 +122,32 @@ export default function LeadDistributor() {
   const handleAddStaff = async () => {
     if (!staffName.trim()) return showError('Please enter staff name.');
     if (!staffEmail.trim()) return showError('Please enter staff email.');
+    if (staffPassword.length < 8) return showError('Staff password must be at least 8 characters.');
 
     setLoading(true);
     try {
       await axios.post(
-        `${API_URL}/api/lead-distributor/staff`,
+        `${API_URL}/api/staff-accounts`,
         {
           name: staffName.trim(),
           email: staffEmail.trim(),
+          password: staffPassword,
         },
         { headers }
       );
 
       setStaffName('');
       setStaffEmail('');
+      setStaffPassword('');
       await loadStaffMembers();
       await loadStats();
-      showSuccess('Staff member added.');
+      showSuccess('Staff account created. Share the login credentials with the staff member.');
     } catch (err) {
       showError('Error: ' + (err.response?.data?.detail || err.message));
     } finally {
       setLoading(false);
     }
   };
-
   const startEditing = (staff) => {
     setEditingStaffId(staff.id);
     setEditName(staff.name);

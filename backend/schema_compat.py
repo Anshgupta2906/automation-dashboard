@@ -23,6 +23,10 @@ def ensure_schema_compatibility() -> None:
         ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE
         """,
         """
+        ALTER TABLE staff_members
+        ADD COLUMN IF NOT EXISTS password_hash VARCHAR
+        """,
+        """
         ALTER TABLE call_logs
         ADD COLUMN IF NOT EXISTS provider_call_id VARCHAR
         """,

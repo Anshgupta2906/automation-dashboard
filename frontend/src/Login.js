@@ -63,8 +63,12 @@ export default function Login() {
       const endpoint = role === "staff" ? "/api/auth/staff-login" : "/api/auth/login";
       const { data } = await api.post(endpoint, { email, password });
 
-      localStorage.setItem("token", data.access_token);
-      localStorage.setItem("user", JSON.stringify(data.user));
+      const tokenKey = data.user.role === "staff" ? "staff_token" : "broker_token";
+      const userKey = data.user.role === "staff" ? "staff_user" : "broker_user";
+      localStorage.setItem(tokenKey, data.access_token);
+      localStorage.setItem(userKey, JSON.stringify(data.user));
+      localStorage.removeItem("token");
+      localStorage.removeItem("user");
       window.location.href = data.user.role === "staff" ? "/staff" : "/dashboard";
     } catch (err) {
       setError(getApiErrorMessage(err, "Unable to sign in. Check your credentials."));
@@ -94,8 +98,10 @@ export default function Login() {
 
       const { data } = await api.post("/api/auth/login", { email, password });
 
-      localStorage.setItem("token", data.access_token);
-      localStorage.setItem("user", JSON.stringify(data.user));
+      localStorage.setItem("broker_token", data.access_token);
+      localStorage.setItem("broker_user", JSON.stringify(data.user));
+      localStorage.removeItem("token");
+      localStorage.removeItem("user");
       window.location.href = "/dashboard";
     } catch (err) {
       setError(getApiErrorMessage(err, "Unable to create your account."));

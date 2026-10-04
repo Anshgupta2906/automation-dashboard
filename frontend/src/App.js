@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import Login from './Login';
 import Dashboard from './Dashboard';
 import StaffDashboard from './StaffDashboard';
+import AdminDashboard from './AdminDashboard';
 
 function App() {
   const token = localStorage.getItem('token');
@@ -11,6 +12,7 @@ function App() {
   return (
     <Router>
       <Routes>
+        <Route path="/admin" element={<AdminDashboard />} />
         <Route path="/login" element={<Login />} />
         <Route
           path="/dashboard"

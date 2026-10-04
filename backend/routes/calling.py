@@ -4,9 +4,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from backend.auth import get_current_user
+from backend.auth import get_current_user, require_subscription_feature
 from backend.database import get_db
-from backend.models.call import CallLog
+from backend.models.call import CallLog, CallingSession
 from backend.models.distribution import StaffMember
 from backend.models.user import User
 from backend.services.calling_service import (
@@ -43,6 +43,7 @@ class PauseCallingRequest(BaseModel):
 
 
 def get_owned_staff(db: Session, current_user: User, staff_id: int) -> StaffMember:
+    require_subscription_feature(db, current_user, "calling")
     staff = db.query(StaffMember).filter(
         StaffMember.id == staff_id,
         StaffMember.broker_id == current_user.id,
@@ -63,6 +64,44 @@ def session_payload(db: Session, staff_id: int) -> dict:
         "current_call_id": session.current_call_id,
         "remaining": get_remaining_count(db, staff_id),
     }
+
+
+@router.get("/team-status")
+def team_status(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    require_subscription_feature(db, current_user, "calling")
+    staff_members = (
+        db.query(StaffMember)
+        .filter(
+            StaffMember.broker_id == current_user.id,
+            StaffMember.is_active.is_(True),
+        )
+        .order_by(StaffMember.id)
+        .all()
+    )
+
+    today = date.today()
+    result = []
+    for staff in staff_members:
+        session = get_session_status(db, staff.id)
+        calls_today = db.query(CallLog).filter(
+            CallLog.staff_id == staff.id,
+            CallLog.called_at >= today,
+        ).count()
+        result.append({
+            "staff_id": staff.id,
+            "name": staff.name,
+            "email": staff.email,
+            "status": session.status,
+            "buffer_seconds": session.buffer_seconds,
+            "calls_today": calls_today,
+            "remaining": get_remaining_count(db, staff.id),
+            "current_call_id": session.current_call_id,
+        })
+
+    return result
 
 
 @router.post("/start")

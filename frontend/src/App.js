@@ -6,8 +6,10 @@ import StaffDashboard from './StaffDashboard';
 import AdminDashboard from './AdminDashboard';
 
 function App() {
-  const token = localStorage.getItem('token');
-  const user = JSON.parse(localStorage.getItem('user') || 'null');
+  const brokerToken = localStorage.getItem('broker_token');
+  const brokerUser = JSON.parse(localStorage.getItem('broker_user') || 'null');
+  const staffToken = localStorage.getItem('staff_token');
+  const staffUser = JSON.parse(localStorage.getItem('staff_user') || 'null');
 
   return (
     <Router>
@@ -16,13 +18,26 @@ function App() {
         <Route path="/login" element={<Login />} />
         <Route
           path="/dashboard"
-          element={token && user?.role !== "staff" ? <Dashboard /> : <Navigate to="/login" />}
+          element={brokerToken && brokerUser?.role === 'broker' ? <Dashboard /> : <Navigate to="/login" />}
         />
         <Route
           path="/staff"
-          element={token && user?.role === "staff" ? <StaffDashboard /> : <Navigate to="/login" />}
+          element={staffToken && staffUser?.role === 'staff' ? <StaffDashboard /> : <Navigate to="/login" />}
         />
-        <Route path="/" element={<Navigate to={token ? (user?.role === "staff" ? "/staff" : "/dashboard") : "/login"} />} />
+        <Route
+          path="/"
+          element={
+            <Navigate
+              to={
+                staffToken && staffUser?.role === 'staff'
+                  ? '/staff'
+                  : brokerToken && brokerUser?.role === 'broker'
+                    ? '/dashboard'
+                    : '/login'
+              }
+            />
+          }
+        />
       </Routes>
     </Router>
   );

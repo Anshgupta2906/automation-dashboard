@@ -7,7 +7,7 @@ import openpyxl
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
-from backend.auth import get_current_user
+from backend.auth import get_current_user, require_subscription_feature
 from backend.database import get_db
 from backend.models.message import MessageCampaign, MessageContact, MessageLog
 from backend.models.user import User
@@ -17,9 +17,8 @@ router = APIRouter(prefix="/api/message-shooter", tags=["message-shooter"])
 MAX_UPLOAD_BYTES = 50 * 1024 * 1024
 
 
-def require_feature(current_user: User) -> None:
-    if not current_user.has_message_shooter:
-        raise HTTPException(status_code=403, detail="Message Shooter is not enabled for this account")
+def require_feature(db: Session, current_user: User) -> None:
+    require_subscription_feature(db, current_user, "message_shooter")
 
 
 def normalize_phone(value) -> str | None:
@@ -63,7 +62,7 @@ async def upload_contacts(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    require_feature(current_user)
+    require_feature(db, current_user)
     contents = await file.read()
 
     if len(contents) > MAX_UPLOAD_BYTES:

@@ -24,25 +24,18 @@ export default function Login() {
         (item) => Array.isArray(item?.loc) && item.loc.includes("email")
       );
 
-      if (emailError) {
-        return "Please enter a valid email address.";
-      }
+      if (emailError) return "Please enter a valid email address.";
 
       const passwordError = detail.find(
         (item) => Array.isArray(item?.loc) && item.loc.includes("password")
       );
 
-      if (passwordError) {
-        return "Password must be between 8 and 128 characters.";
-      }
+      if (passwordError) return "Password must be between 8 and 128 characters.";
 
       return "Please check the information you entered.";
     }
 
-    if (typeof detail === "string") {
-      return detail;
-    }
-
+    if (typeof detail === "string") return detail;
     return fallback;
   };
 
@@ -95,8 +88,8 @@ export default function Login() {
       await api.post("/api/auth/signup", {
         email,
         password,
-        has_message_shooter: false,
-        has_lead_distributor: false,
+        has_message_shooter: true,
+        has_lead_distributor: true,
       });
 
       const { data } = await api.post("/api/auth/login", { email, password });

@@ -21,6 +21,10 @@ export default function StaffDashboard() {
   const [loading, setLoading] = useState(false);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [passwordLoading, setPasswordLoading] = useState(false);
+  const [mustChangePassword, setMustChangePassword] = useState(Boolean(user.must_change_password));
 
   useEffect(() => {
     const saved = localStorage.getItem("activeCall");
@@ -39,6 +43,7 @@ export default function StaffDashboard() {
         api.get("/api/staff-calling/logs"),
       ]);
       setStaff(me.data);
+      setMustChangePassword(Boolean(me.data.must_change_password));
       setStatus(statusRes.data.status || "stopped");
       setBufferSeconds(statusRes.data.buffer_seconds || 7);
       setNextLead(nextRes.data.status === "ready" ? nextRes.data.contact : null);
@@ -61,7 +66,45 @@ export default function StaffDashboard() {
     window.location.href = "/login";
   };
 
+  const [passwordForChange, setPasswordForChange] = useState("");
+
+  const changePassword = async (event) => {
+    event.preventDefault();
+    setError("");
+    setNotice("");
+
+    if (newPassword.length < 8) {
+      setError("New password must be at least 8 characters.");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setError("New password and confirmation do not match.");
+      return;
+    }
+
+    setPasswordLoading(true);
+    try {
+      await api.post("/api/auth/staff/change-password", {
+        current_password: passwordForChange,
+        new_password: newPassword,
+      });
+      const updatedUser = { ...staff, must_change_password: false };
+      localStorage.setItem("user", JSON.stringify(updatedUser));
+      setStaff(updatedUser);
+      setMustChangePassword(false);
+      setPasswordForChange("");
+      setNewPassword("");
+      setConfirmPassword("");
+      setNotice("Password changed successfully.");
+    } catch (err) {
+      setError(err.response?.data?.detail || "Unable to change password.");
+    } finally {
+      setPasswordLoading(false);
+    }
+  };
+
   const start = async () => {
+    if (mustChangePassword) return;
     setLoading(true);
     setError("");
     try {
@@ -104,6 +147,7 @@ export default function StaffDashboard() {
   };
 
   const callNext = async () => {
+    if (mustChangePassword) return;
     setLoading(true);
     setError("");
     setNotice("");
@@ -167,8 +211,55 @@ export default function StaffDashboard() {
 
         {notice && <div style={{ ...card, background: "#ecfdf3", color: "#067647", padding: 14 }}>{notice}</div>}
         {error && <div style={{ ...card, background: "#fef3f2", color: "#b42318", padding: 14 }}>{error}</div>}
+        {mustChangePassword && (
+          <section style={{ ...card, border: "1px solid #f59e0b", background: "#fffbeb" }}>
+            <h2 style={{ marginTop: 0 }}>Set your new password</h2>
+            <p style={{ color: "#667085" }}>
+              This is your first login or your password was reset by the broker. Choose a new password before using the calling queue.
+            </p>
+            <form onSubmit={changePassword} style={{ display: "grid", gap: 10, maxWidth: 460 }}>
+              <input
+                type="password"
+                placeholder="Temporary/current password"
+                value={passwordForChange}
+                onChange={(e) => setPasswordForChange(e.target.value)}
+                autoComplete="current-password"
+                required
+                style={{ padding: 11, border: "1px solid #d0d5dd", borderRadius: 8 }}
+              />
+              <input
+                type="password"
+                placeholder="New password (8+ characters)"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                autoComplete="new-password"
+                minLength={8}
+                required
+                style={{ padding: 11, border: "1px solid #d0d5dd", borderRadius: 8 }}
+              />
+              <input
+                type="password"
+                placeholder="Confirm new password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                autoComplete="new-password"
+                minLength={8}
+                required
+                style={{ padding: 11, border: "1px solid #d0d5dd", borderRadius: 8 }}
+              />
+              <button
+                type="submit"
+                disabled={passwordLoading}
+                style={{ padding: "11px 16px", border: 0, borderRadius: 8, background: "#2563eb", color: "#fff", fontWeight: 700 }}
+              >
+                {passwordLoading ? "Saving..." : "Set New Password"}
+              </button>
+            </form>
+          </section>
+        )}
 
-        <section style={card}>
+
+        <section style={{ ...card, opacity: mustChangePassword ? 0.55 : 1 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
             <div>
               <h2 style={{ margin: 0 }}>Calling Queue</h2>

@@ -12,6 +12,8 @@ from backend.routes.auth import router as auth_router
 from backend.routes.calling import router as calling_router
 from backend.routes.lead_distributor import router as lead_distributor_router
 from backend.routes.message_shooter import router as message_shooter_router
+from backend.routes.staff_accounts import router as staff_accounts_router
+from backend.routes.staff_calling import router as staff_calling_router
 from backend.routes.test import router as test_router
 from backend.schema_compat import ensure_schema_compatibility
 from backend.services.scheduler_service import start_scheduler, stop_scheduler
@@ -53,6 +55,8 @@ app.include_router(auth_router)
 app.include_router(message_shooter_router)
 app.include_router(lead_distributor_router)
 app.include_router(calling_router)
+app.include_router(staff_accounts_router)
+app.include_router(staff_calling_router)
 app.include_router(test_router)
 
 

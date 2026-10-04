@@ -8,6 +8,7 @@ from sqlalchemy import text
 
 from backend.database import engine
 from backend.models import Base
+from backend.routes.admin import router as admin_router
 from backend.routes.auth import router as auth_router
 from backend.routes.calling import router as calling_router
 from backend.routes.lead_distributor import router as lead_distributor_router
@@ -52,6 +53,7 @@ app.add_middleware(
 )
 
 app.include_router(auth_router)
+app.include_router(admin_router)
 app.include_router(message_shooter_router)
 app.include_router(lead_distributor_router)
 app.include_router(calling_router)

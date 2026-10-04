@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from backend.database import get_db
 from backend.models.distribution import StaffMember
+from backend.models.subscription import Subscription
 from backend.models.user import User
 from backend.services.auth_service import ALGORITHM, SECRET_KEY
 
@@ -79,4 +80,9 @@ def get_current_staff(
             detail="Staff account no longer exists",
             headers={"WWW-Authenticate": "Bearer"},
         )
+
+    subscription = db.query(Subscription).filter(Subscription.user_id == staff.broker_id).first()
+    if subscription and subscription.status == "paused":
+        raise HTTPException(status_code=403, detail="The broker plan is currently paused. Staff access is unavailable.")
+
     return staff

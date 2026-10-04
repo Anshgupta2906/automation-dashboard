@@ -22,6 +22,7 @@ class StaffMember(Base):
     broker_id = Column(Integer, ForeignKey("users.id"))
     name = Column(String)
     email = Column(String)
+    password_hash = Column(String, nullable=True)
     is_active = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 

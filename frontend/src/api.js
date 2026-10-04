@@ -5,21 +5,24 @@ const api = axios.create({
   timeout: 30000,
 });
 
-const getSessionToken = () => {
-  const user = JSON.parse(localStorage.getItem("user") || "null");
-  if (user?.role === "staff") {
-    return localStorage.getItem("staff_token");
-  }
-  if (user?.role === "broker") {
-    return localStorage.getItem("broker_token");
-  }
+const getSessionRole = () => {
+  if (window.location.pathname.startsWith("/staff")) return "staff";
+  if (window.location.pathname.startsWith("/dashboard")) return "broker";
 
-  return localStorage.getItem("broker_token") || localStorage.getItem("staff_token");
+  const staffUser = JSON.parse(localStorage.getItem("staff_user") || "null");
+  const brokerUser = JSON.parse(localStorage.getItem("broker_user") || "null");
+  if (staffUser?.role === "staff" && !brokerUser) return "staff";
+  return "broker";
+};
+
+const getSessionToken = () => {
+  return getSessionRole() === "staff"
+    ? localStorage.getItem("staff_token")
+    : localStorage.getItem("broker_token");
 };
 
 const clearSession = () => {
-  const user = JSON.parse(localStorage.getItem("user") || "null");
-  if (user?.role === "staff") {
+  if (getSessionRole() === "staff") {
     localStorage.removeItem("staff_token");
     localStorage.removeItem("staff_user");
   } else {

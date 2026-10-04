@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
@@ -57,6 +59,47 @@ def get_current_user(
     return user
 
 
+CALLING_PLAN = "all_in_one"
+
+def require_subscription_feature(db: Session, user: User, feature: str) -> Subscription:
+    """Enforce the admin-assigned subscription before a broker feature is used."""
+    subscription = db.query(Subscription).filter(Subscription.user_id == user.id).first()
+
+    if subscription is None:
+        if user.has_message_shooter and user.has_lead_distributor:
+            plan = "all_in_one"
+        elif user.has_message_shooter:
+            plan = "message_shooter"
+        elif user.has_lead_distributor:
+            plan = "lead_distributor"
+        else:
+            plan = "none"
+        subscription = Subscription(user_id=user.id, plan=plan, status="active")
+        db.add(subscription)
+        db.commit()
+        db.refresh(subscription)
+
+    if subscription.status != "active":
+        raise HTTPException(status_code=403, detail=f"Your subscription is {subscription.status}. Contact the administrator.")
+
+    if subscription.expires_at:
+        expiry = subscription.expires_at
+        now = datetime.now(timezone.utc) if expiry.tzinfo else datetime.utcnow()
+        if expiry <= now:
+            raise HTTPException(status_code=403, detail="Your subscription has expired. Contact the administrator.")
+
+    allowed_plans = {
+        "message_shooter": {"message_shooter", "all_in_one"},
+        "lead_distributor": {"lead_distributor", "all_in_one"},
+        "calling": {"all_in_one"},
+    }
+    if feature not in allowed_plans:
+        raise HTTPException(status_code=500, detail="Unknown subscription feature")
+    if subscription.plan not in allowed_plans[feature]:
+        raise HTTPException(status_code=403, detail="This feature is not included in your current plan.")
+
+    return subscription
+
 def get_current_admin(
     credentials: HTTPAuthorizationCredentials = Depends(security),
 ) -> dict:
@@ -90,8 +133,9 @@ def get_current_staff(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    subscription = db.query(Subscription).filter(Subscription.user_id == staff.broker_id).first()
-    if subscription and subscription.status == "paused":
-        raise HTTPException(status_code=403, detail="The broker plan is currently paused. Staff access is unavailable.")
+    broker = db.query(User).filter(User.id == staff.broker_id).first()
+    if not broker:
+        raise HTTPException(status_code=401, detail="Broker account no longer exists")
 
+    require_subscription_feature(db, broker, "calling")
     return staff

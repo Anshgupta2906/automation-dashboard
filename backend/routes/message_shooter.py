@@ -109,7 +109,7 @@ def schedule_message(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    require_feature(current_user)
+    require_feature(db, current_user)
 
     if not schedule.message.strip():
         raise HTTPException(status_code=400, detail="Message cannot be empty")
@@ -140,7 +140,7 @@ def list_campaigns(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    require_feature(current_user)
+    require_feature(db, current_user)
     campaigns = (
         db.query(MessageCampaign)
         .filter(MessageCampaign.broker_id == current_user.id)
@@ -166,7 +166,7 @@ def message_stats(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    require_feature(current_user)
+    require_feature(db, current_user)
     contact_count = db.query(MessageContact).filter(MessageContact.broker_id == current_user.id).count()
     campaign_count = db.query(MessageCampaign).filter(MessageCampaign.broker_id == current_user.id).count()
     queued_count = (

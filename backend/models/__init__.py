@@ -3,6 +3,7 @@ from .user import User
 from .call import CallLog
 from .message import MessageCampaign, MessageContact, MessageLog
 from .distribution import DistributionContact, StaffMember, DistributionConfig, DistributionHistory
+from .subscription import Subscription
 
 __all__ = [
     "Base",
@@ -15,4 +16,5 @@ __all__ = [
     "StaffMember",
     "DistributionConfig",
     "DistributionHistory",
+    "Subscription",
 ]

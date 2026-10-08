@@ -12,14 +12,15 @@ load_dotenv()
 GMAIL_USER = os.getenv("GMAIL_USER", "your-email@gmail.com")
 GMAIL_PASSWORD = os.getenv("GMAIL_PASSWORD", "your-app-password")
 
-def send_leads_email(staff_email: str, staff_name: str, contacts: list):
+def send_leads_email(staff_email: str, staff_name: str, contacts: list, email_date=None):
     """Send leads to staff member via email with CSV attachment"""
     try:
         # Create email message
         msg = MIMEMultipart()
         msg['From'] = GMAIL_USER
         msg['To'] = staff_email
-        msg['Subject'] = f"Daily Leads - {date.today().strftime('%B %d, %Y')}"
+        report_date = email_date or date.today()
+        msg['Subject'] = f"Daily Leads - {report_date.strftime('%B %d, %Y')}"
         
         # Email body
         body = f"""
@@ -50,7 +51,7 @@ def send_leads_email(staff_email: str, staff_name: str, contacts: list):
         
         csv_content = csv_buffer.getvalue()
         attachment = MIMEText(csv_content)
-        attachment.add_header('Content-Disposition', 'attachment', filename=f'leads_{date.today()}.csv')
+        attachment.add_header('Content-Disposition', 'attachment', filename=f'leads_{report_date}.csv')
         msg.attach(attachment)
         
         # Send email

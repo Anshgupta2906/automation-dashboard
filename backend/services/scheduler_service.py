@@ -11,7 +11,9 @@ from backend.models.message import MessageCampaign, MessageContact, MessageLog
 from backend.routes.lead_distributor import distribute_for_broker
 from backend.services.email_service import send_leads_email
 
-scheduler = BackgroundScheduler(timezone=ZoneInfo(os.getenv("APP_TIMEZONE", "Asia/Kolkata")))
+APP_TIMEZONE = os.getenv("APP_TIMEZONE", "Asia/Kolkata").strip() or "Asia/Kolkata"
+APP_TZ = ZoneInfo(APP_TIMEZONE)
+scheduler = BackgroundScheduler(timezone=APP_TZ)
 
 
 def _send_daily_lead_emails(db, broker_id: int, today) -> tuple[int, int, int]:
@@ -42,7 +44,7 @@ def _send_daily_lead_emails(db, broker_id: int, today) -> tuple[int, int, int]:
 
         payload = [{"phone": c.phone, "name": c.name or "N/A"} for c in contacts]
 
-        if send_leads_email(staff.email, staff.name, payload):
+        if send_leads_email(staff.email, staff.name, payload, email_date=today):
             sent += 1
         else:
             failed += 1
